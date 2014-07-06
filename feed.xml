@@ -1,0 +1,966 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>pwnall Hacking on Blink and Chromium</title>
+    <description>Victor Costan is a Blink / Chromium committer and a WebKit contributor. This blog documents his attempts to understand the codebases and improve the Web platform.</description>
+    <link>http://pwnall.herokuapp.com/</link>
+    <atom:link href="http://pwnall.herokuapp.com/feed.xml" rel="self" type="application/rss+xml" />
+    
+      <item>
+        <title>Comparing Against the Current Time in JavaScript</title>
+        <description>&lt;p&gt;I recently had to write a Blink layout test ensuring that a piece of code
+returns the current time. I am documenting the stages I went through, hoping to
+provide both entertainment and an appreciation for the importance of using
+code that has been thoroughly tested instead of rolling your own.&lt;/p&gt;
+
+&lt;p&gt;Let&amp;#39;s start by formalizing the task at hand: given a function &lt;code&gt;code&lt;/code&gt;, we want
+to write a test function &lt;code&gt;test&lt;/code&gt; that returns &lt;em&gt;true&lt;/em&gt; if &lt;code&gt;code&lt;/code&gt;&amp;#39;s return value is
+the current time, and &lt;em&gt;false&lt;/em&gt; otherwise.&lt;/p&gt;
+
+&lt;h1&gt;Revision 1: Direct Comparison&lt;/h1&gt;
+
+&lt;p&gt;The straight-forward comparison method is relatively straight-forward.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;test&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;instanceof&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;number&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;7&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;I&amp;#39;m using &lt;code&gt;===&lt;/code&gt;, like 99.99999% of JavaScript code should. I used &lt;code&gt;valueOf()&lt;/code&gt;
+to convert Date instances into numbers, because different &lt;code&gt;Date&lt;/code&gt; instaces are
+never equal. Conveniently, &lt;code&gt;valueOf()&lt;/code&gt; works the same way for both numbers and
+dates, so I don&amp;#39;t have to worry about whether &lt;code&gt;Date.now()&lt;/code&gt; returns a &lt;code&gt;Date&lt;/code&gt;
+instance (which is true in some browsers) or a number, as the specification
+says.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;// Always false, can&amp;#39;t use equality on dates.&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;This test will probably work on your machine, and will most likely pass a
+continuous integration suite. However, it is a &lt;em&gt;flaky test&lt;/em&gt;, meaning that at
+some point it will fail. Let&amp;#39;s write some code to prove that.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;proveTestIsBroken&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;good&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;test&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;good&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;7&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;8&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;9&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;10&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;On my machine, running this in the Chromium dev tools comes up with a number
+in less than a second.&lt;/p&gt;
+
+&lt;h1&gt;Revision 2: Stubbing&lt;/h1&gt;
+
+&lt;p&gt;In many cases, a great way to solve this problem is to stub the Date API used
+by the code being tested.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;test&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;stubbedTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1384868334920&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;realDateNow&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;realDateConstructor&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;realDateConstructor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;stubbedTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;7&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;8&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;stubbedTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;9&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;nx&quot;&gt;realDateConstructor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;10&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;11&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;try&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;12&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;13&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;finally&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;14&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;nb&quot;&gt;window&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;realDateConstructor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;15&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;realDateNow&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;16&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;17&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;18&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;instanceof&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;number&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;19&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;20&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;21&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;stubbedTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;22&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;This code is a bit paranoid, and is probably overkill for specific cases. It
+stubs &lt;code&gt;now()&lt;/code&gt; on both the stubbed &lt;code&gt;Date&lt;/code&gt; constructor and on the real
+constructor, so all the &lt;code&gt;code()&lt;/code&gt; variants below would be recognized as correct.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;return new Date();&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;return Date.now();&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;return (new Date()).constructor.now()&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The biggest advantage of this approach is that the stubbed current time is
+consistent across tests, which makes for very robust tests. In return, we pay
+the usual price of stubbing and mocking, namely our test doesn&amp;#39;t prove that
+&lt;code&gt;code()&lt;/code&gt; returns the current time, it merely proves that it calls some API and
+passes down its return value. Assuming that the underlying APIs are solid and
+will not change, the trade-off is usually worth it!&lt;/p&gt;
+
+&lt;p&gt;At the same time, this approach does not work if &lt;code&gt;code()&lt;/code&gt; uses an API that we
+can&amp;#39;t stub, or if we really want to assert that it returns the current time.&lt;/p&gt;
+
+&lt;h1&gt;Revision 3: Time is Monotonic&lt;/h1&gt;
+
+&lt;p&gt;The clever code below takes advantage of the fact that time is monotonic.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;test&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;instanceof&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;number&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;7&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;8&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;9&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;10&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;11&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Sadly, this test is still not bulletproof. &lt;code&gt;proveTestIsBroken()&lt;/code&gt; will terminate
+if our assumption of monotonic time breaks down. Most computers use NTP to keep
+their clock synchronized, so the clock might still be adjusted backwards.
+&lt;code&gt;test&lt;/code&gt; is still flaky.&lt;/p&gt;
+
+&lt;h1&gt;Revision 4: Sometimes, Time is Monotonic&lt;/h1&gt;
+
+&lt;p&gt;A straight-forward fix for the NTP issue is below.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;test&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;7&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;8&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;      &lt;span class=&quot;k&quot;&gt;continue&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;// Time went backwards. (NTP adjustment?)&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;9&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;10&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;11&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;instanceof&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;number&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;12&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;13&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;14&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;15&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;16&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;17&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;The sight of &lt;code&gt;while (true)&lt;/code&gt; makes experienced programmers wary, as it can turn
+into an infinite loop under the right cirumstances. In some cases this will be
+catastrophic. Most test frameworks implement a timeout mechanism, so the
+consequence of an infinite loop will be a cryptic error message, and possibly
+slowing down other tests that are queued up to run on the same machine. Still,
+test failures are better than timeouts.&lt;/p&gt;
+
+&lt;h1&gt;Revision 5: Time is Usually Monotonic&lt;/h1&gt;
+
+&lt;p&gt;We can get rid of the &lt;code&gt;while (true)&lt;/code&gt; if we assume that NTP updates are
+infrequent, and just bail if the time keeps moving backwards.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;test&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;now&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;7&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;8&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;      &lt;span class=&quot;k&quot;&gt;continue&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;// Time went backwards. (NTP adjustment?)&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;9&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;10&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;11&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;instanceof&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;number&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;#x7b;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;12&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;13&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;14&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;valueOf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;15&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startTime&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;16&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;17&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;18&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;error&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;The clock is too broken to be used in tests.&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;19&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;20&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;p&quot;&gt;&amp;#x7d;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;We still have to assume that when the clock is adjusted backwards, the jumps
+are relatively large. If there is a small jump backwards right after
+&lt;code&gt;startTime&lt;/code&gt; is read, but &lt;code&gt;code()&lt;/code&gt; takes long enough to run, &lt;code&gt;endTime&lt;/code&gt; might
+still be greater than &lt;code&gt;startTime&lt;/code&gt;, causing &lt;code&gt;test()&lt;/code&gt; to return &lt;code&gt;false&lt;/code&gt; even
+though &lt;code&gt;code()&lt;/code&gt; might be correct.&lt;/p&gt;
+
+&lt;p&gt;I will stop here for now, but reserve the right to update the aricle if the
+code above proves insufficient.&lt;/p&gt;
+
+&lt;h1&gt;Credits&lt;/h1&gt;
+
+&lt;p&gt;All the clever bits in this article are lifted from
+&lt;a href=&quot;https://codereview.chromium.org/74213009/&quot;&gt;code review comments&lt;/a&gt;
+contributed by various Chromium reviewers. The mistakes are all mine.&lt;/p&gt;
+</description>
+        <pubDate>Tue, 19 Nov 2013 05:25:00 -0500</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/11/19/comparing-against-the-current-time-in-javascript/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/11/19/comparing-against-the-current-time-in-javascript/</guid>
+      </item>
+    
+      <item>
+        <title>Running the Blink Layout Tests on Fedora Linux</title>
+        <description>&lt;p&gt;I use Fedora instead of the recommended Ubuntu distribution. My main motivation
+is that Fedora generally ships newer packages than Ubuntu, so I get to try out
+newer versions of software earlier than most people. In the context of Chromium
+and Blink development, this means I&amp;#39;m more likely to catch bugs like
+&lt;a href=&quot;https://codereview.chromium.org/26432002/&quot;&gt;this one&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;This is a list of the steps I did to be able to run Blink&amp;#39;s layout tests on
+Fedora Linux. Layout tests are currently main method of testing in Blink, so
+being able to run them is a pretty hard prerequisite to working on patches.&lt;/p&gt;
+
+&lt;h1&gt;Build Prerequisites&lt;/h1&gt;
+
+&lt;p&gt;The
+&lt;a href=&quot;https://code.google.com/p/chromium/wiki/LinuxBuildInstructionsPrerequisites#Fedora_Setup&quot;&gt;Fedora Setup section&lt;/a&gt;
+of the Linux build prerequisites in the Chromium wiki has two commands that
+can be conveniently copy-pasted to get most of the packages needed for building
+Chromium. The optional packages are needed for running Blink&amp;#39;s layout tests, so
+make sure you run both commands.&lt;/p&gt;
+
+&lt;p&gt;The comments section also has a list of packages that should be installed, and
+somewhat makes up for the fact that the Chromium codebase evolves much faster
+than the Wiki page.&lt;/p&gt;
+
+&lt;p&gt;After installing all the packages, you should be able to build the
+&lt;code&gt;blink_tests&lt;/code&gt; target, which contains the Content Shell and all the tools used
+to run the layout tests.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;ninja -C out/Debug blink_tests&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Fonts for the Layout Tests&lt;/h1&gt;
+
+&lt;p&gt;The layout tests refuse to run without the fonts used by the pixel tests. The
+font list and lookup details are in
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/content/shell/app/webkit_test_platform_support_linux.cc&quot;&gt;&lt;code&gt;src/content/shell/app/webkit_test_platform_support_linux.cc&lt;/code&gt;&lt;/a&gt;.
+If the path above changes, try
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#search/&amp;amp;q=kochi-gothic.ttf&amp;amp;sq=package:chromium&amp;amp;type=cs&quot;&gt;searching the codebase for kochi-gothic.ttf&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The easiest method for obtaining the needed fonts is:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;&lt;a href=&quot;http://www.ubuntu.com/download/desktop&quot;&gt;Download an Ubuntu desktop ISO&lt;/a&gt;.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Use &lt;a href=&quot;https://www.virtualbox.org/&quot;&gt;VirtualBox&lt;/a&gt; (or your favorite alternative)
+to set up an Ubuntu VM.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Open up the
+&lt;a href=&quot;https://code.google.com/p/chromium/wiki/LinuxBuildInstructionsPrerequisites#Ubuntu_Setup&quot;&gt;Ubuntu Setup section&lt;/a&gt;
+in a browser in the VM.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Install the font-related packages (look for &lt;em&gt;font&lt;/em&gt; or &lt;em&gt;ttf&lt;/em&gt; in the package
+name) in the VM.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Copy the entire &lt;code&gt;/usr/share/fonts/truetype&lt;/code&gt; directory to your Fedora
+installation.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;mkdir ~/Downloads/ChromiumFonts
+scp -r you@vmname.local:/usr/share/fonts/truetype ~/Downloads/ChromiumFonts
+sudo cp -r ~/Downloads/Chromiumfonts/truetype /usr/share/fonts
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Check that the layout tests are happy with your font setup.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;cd ~/chromium/src
+out/Debug/content_shell --dump-render-tree ~/chromium/src/third_party/WebKit/LayoutTests/fast/js/array-indexof.html
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Stash the fonts in your Dropbox or Google Drive, so you won&amp;#39;t have to do
+this again.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Power off and remove the Ubuntu VM.&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;For whatever it&amp;#39;s worth, the Microsoft fonts can be easily obtained by
+installing the RPM from the
+&lt;a href=&quot;http://sourceforge.net/projects/mscorefonts2/&quot;&gt;mscorefonts2 project&lt;/a&gt;. However,
+a reasonably thorough search for &lt;code&gt;koichi-gothic.ttf&lt;/code&gt; led to no results, so the
+Ubuntu VM method is the fastest method I know for getting all the fonts.&lt;/p&gt;
+
+&lt;h2&gt;Story: Debugging a Crash in the Layout Tests Crash&lt;/h2&gt;
+
+&lt;p&gt;On one occasion, all the layout tests that I ran resulted in crashes. The steps
+I took might be helpful for shedding light on a similar situation.&lt;/p&gt;
+
+&lt;p&gt;First, I first found an &amp;quot;easy&amp;quot; test that really shouldn&amp;#39;t crash the renderer,
+so I wouldn&amp;#39;t have to worry about whether the crash was introduced by a recent
+change. My test was
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/LayoutTests/fast/js/array-indexof.html&quot;&gt;&lt;code&gt;fast/js/array-indexof.html&lt;/code&gt;&lt;/a&gt;,
+but other tests in that directory might be equally suitable.&lt;/p&gt;
+
+&lt;p&gt;Running the test with the extra &lt;code&gt;--driver-logging&lt;/code&gt; option revealed the issue.
+(I was missing fonts.)&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;webkit/tools/layout_tests/run_webkit_tests.sh --debug --driver-logging fast/js/array-indexof.html&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Had that not worked, I would have ran the test in the Content Shell directly.
+Note that unlike the full Chromium build, the Content Shell can&amp;#39;t convert
+relative paths into URLs, so I&amp;#39;m giving it a full path. I&amp;#39;m relying on bash to
+expand &lt;code&gt;~&lt;/code&gt; to my home directory.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;out/Debug/content_shell ~/chromium/src/third_party/WebKit/LayoutTests/fast/js/array-indexof.html&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;In my case, this command worked, and showed me that the problem was somewhere
+in the testing infrastructure, so I ran the test with the &lt;code&gt;--dump-render-tree&lt;/code&gt;
+flag.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;out/Debug/content_shell --dump-render-tree ~/chromium/src/third_party/WebKit/LayoutTests/fast/js/array-indexof.html&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+</description>
+        <pubDate>Fri, 15 Nov 2013 11:02:00 -0500</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/11/15/running-the-blink-layout-tests-on-fedora-linux/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/11/15/running-the-blink-layout-tests-on-fedora-linux/</guid>
+      </item>
+    
+      <item>
+        <title>Searching the Chromium Codebase</title>
+        <description>&lt;p&gt;After I started programming professionally, I was literally shocked when I
+asked my tech lead &amp;quot;where is X implemented?&amp;quot;, and his answer was &amp;quot;let&amp;#39;s &lt;code&gt;grep&lt;/code&gt;
+for it&amp;quot;. My schoolwork consisted of writing a new piece of software, or
+completely understanding a piece of software, and then using or modifying it.
+At the same time, if I wanted to look up a piece of information, I would use
+Google instead of going to a library and trying to figure out what book might
+hold my answer.&lt;/p&gt;
+
+&lt;p&gt;Long story short, &lt;code&gt;grep&lt;/code&gt; is a central piece to finding one&amp;#39;s way in a large
+codebase, just like Google is the only sensible way of finding specific bits of
+information in the large pool of human knowledge that we have on the Web.&lt;/p&gt;
+
+&lt;h1&gt;Git Grep&lt;/h1&gt;
+
+&lt;p&gt;&lt;code&gt;git grep&lt;/code&gt; works for any repository, so it was go-to tool when I started
+hacking on the Chromium codebase. I still use it when I&amp;#39;m traveling and I don&amp;#39;t
+have Internet access. For most cases, Google&amp;#39;s code search (covered in the
+following section) is a better tool.&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;git grep&lt;/code&gt; is better than the plain vanilla &lt;code&gt;grep&lt;/code&gt; because it searches over the
+entire repository. However, Chromium uses many repositories, so &lt;code&gt;git grep&lt;/code&gt; does
+not cover the entire codebase.&lt;/p&gt;
+
+&lt;p&gt;For example, the search below does not cover the Blink repository.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;git grep -n -3 allowImage&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Moving to Blink&amp;#39;s root directory will make &lt;code&gt;git grep&lt;/code&gt; search the Blink
+repository. For this reason, I usually have at least one Terminal tab open in
+&lt;code&gt;~/chromium/src&lt;/code&gt; and one tab open in &lt;code&gt;~/chromium/src/third_party/WebKit&lt;/code&gt;.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src/third_party/WebKit
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;git grep -n -3 allowImage&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;I found the command-line arguments above to be generally useful. &lt;code&gt;-n&lt;/code&gt; shows
+line numbers, &lt;code&gt;-3&lt;/code&gt; provides 3 lines of context above and below the match. 3 is
+not a magic value, all digits work similarly.&lt;/p&gt;
+
+&lt;p&gt;Bash assigns special meaning to some characters. Remember to escape them or to
+quote the pattern when necessary.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src/third_party/WebKit
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;git grep -n -3 &lt;span class=&quot;s2&quot;&gt;&amp;quot;allowImage(&amp;quot;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;git grep -n -3 allowImage&lt;span class=&quot;se&quot;&gt;\\&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;If you find yourself using &lt;code&gt;git grep&lt;/code&gt; a lot (presumably for other projects),
+consider upgrading to &lt;a href=&quot;http://beyondgrep.com/&quot;&gt;ack&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h1&gt;Code Search: Grep on Steroids&lt;/h1&gt;
+
+&lt;p&gt;Google&amp;#39;s
+&lt;a href=&quot;http://en.wikipedia.org/wiki/Google_Code_Search&quot;&gt;Code Search service&lt;/a&gt; was shut
+down in 2013, but it is still up and running for the Chromium code base, at
+&lt;a href=&quot;http://cs.chromium.org&quot;&gt;cs.chromium.org&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The main advantage of Chromium Code Search is the search speed. For example,
+&lt;code&gt;time git --no-pager grep -n -3 &amp;quot;allowImage(&amp;quot;&lt;/code&gt; took 1.9 seconds in the main
+Chromium repository and 2.7 seconds in the Blink repository, on a high-end
+mid-2012 Retina MacBook Pro. Chromium Code search answered the same query for
+&lt;em&gt;the entire Chromium codebase&lt;/em&gt; in 0.2 seconds.&lt;/p&gt;
+
+&lt;p&gt;Here are the three features that I didn&amp;#39;t discover right away, but I used a
+lot once I figured them out.&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;Hovering over a name turns it into a link to the definition for the
+respective variable, function, method or class. My Chromium setup opens a
+link in a new tab when I click on the middle mouse button, and I use this a
+lot when exploring Chromium code.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Clicking over a name where it is defined opens up the XRefs
+(cross-references) pane, which is much better than a raw search for commonly
+used names.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;The file tree on the left can be replaced with an outline of the current
+file. Look for the &lt;em&gt;Outline&lt;/em&gt; link above the tree.&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;If you&amp;#39;d like to use code search for other projects, you might be interested in
+the
+&lt;a href=&quot;https://code.google.com/p/codesearch/&quot;&gt;open-sourced Google Code Search back-end code&lt;/a&gt;.
+Unfortunately, this is not the full code for the Web application, but rather a
+starting point. Even if you don&amp;#39;t end up using the implementation there, the
+comments in the code are very insightful.&lt;/p&gt;
+
+&lt;h1&gt;Active Exploration&lt;/h1&gt;
+
+&lt;p&gt;This post covered passively exploring the Chromium codebase by searching.
+Sometimes, passive search is inefficient, and must be complemented by active
+exploration methods such as
+&lt;a href=&quot;/2013/10/25/logging-in-chromium/&quot;&gt;logging&lt;/a&gt; and
+getting stack traces (upcoming post).&lt;/p&gt;
+
+&lt;h1&gt;References&lt;/h1&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.kernel.org/pub/software/scm/git/docs/git-grep.html&quot;&gt;Man page for git grep&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://beyondgrep.com/why-ack/&quot;&gt;Top 10 reasons to use ack for source code&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://swtch.com/%7Ersc/regexp/regexp4.html&quot;&gt;Regular Expression Matching with a Trigram Index or How Google Code Search Worked&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+        <pubDate>Sat, 09 Nov 2013 17:06:00 -0500</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/11/09/searching-the-chromium-codebase/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/11/09/searching-the-chromium-codebase/</guid>
+      </item>
+    
+      <item>
+        <title>Blog Setup</title>
+        <description>&lt;p&gt;This article is a quick description of the software stack used to publish this
+blog.&lt;/p&gt;
+
+&lt;h1&gt;Octopress&lt;/h1&gt;
+
+&lt;p&gt;The blog uses the
+&lt;a href=&quot;https://github.com/octopress/octopress&quot;&gt;3.0 release candidates&lt;/a&gt; of the
+&lt;a href=&quot;http://octopress.org/&quot;&gt;Octopress static blog generator&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;I installed the &lt;code&gt;octopress&lt;/code&gt; gem, used it to create a new blog, then I created
+a &lt;code&gt;Gemfile&lt;/code&gt; that tracks all the gems I am using.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;gem install --pre octopress
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;octopress new pwnall-blog
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;pwnall-blog
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;gvim Gemfile&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;I edited &lt;code&gt;_config.yml&lt;/code&gt; to personalize the Jekyll blog settings. Most changes
+were straightforward. I had to add a &lt;code&gt;gems&lt;/code&gt; section, listing the &lt;code&gt;octopress-&lt;/code&gt;
+components that I am using.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;figcaption class=&#39;code-highlight-caption&#39;&gt;&lt;span class=&#39;code-highlight-caption-title&#39;&gt;_config.yml snippet&lt;/span&gt;&lt;/figcaption&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;c1&quot;&gt;# Build settings&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;ss&quot;&gt;markdown&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kramdown&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;ss&quot;&gt;permalink&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pretty&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;ss&quot;&gt;gems&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;octopress&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;codefence&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;6&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;  &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;octopress&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;solarized&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Heroku&lt;/h1&gt;
+
+&lt;p&gt;The blog is deployed on the &lt;a href=&quot;https://www.heroku.com/&quot;&gt;Heroku platform&lt;/a&gt;, and
+using their generous free tier. I use one dyno and no plugins.&lt;/p&gt;
+
+&lt;p&gt;I did not follow the Octopress deployment guide for Heroku, because I did not
+agree with the approach of checking in the generated static pages.&lt;/p&gt;
+
+&lt;p&gt;Instead, I used an
+&lt;a href=&quot;https://github.com/pwnall/heroku-buildpack-ruby&quot;&gt;Octopress buildpack&lt;/a&gt;,
+which generates the static pages when I push to Heroku&amp;#39;s git repository.&lt;/p&gt;
+
+&lt;p&gt;This build pack is basically
+&lt;a href=&quot;https://github.com/heroku/heroku-buildpack-ruby&quot;&gt;Heroku&amp;#39;s official Ruby buildpack&lt;/a&gt;,
+with the Octopress logic borrowed from
+&lt;a href=&quot;https://github.com/jgarber/heroku-buildpack-ruby-octopress&quot;&gt;jgarber&amp;#39;s Octopress buildpack&lt;/a&gt;.
+I&amp;#39;m betting that Heroku will update their buildpack much more frequently than
+I&amp;#39;ll have to update the Octopress bits, so I&amp;#39;m using a rebasing workflow for
+the buildpack.&lt;/p&gt;
+
+&lt;p&gt;I followed
+&lt;a href=&quot;http://jasongarber.com/blog/2012/01/10/deploying-octopress-to-heroku-with-a-custom-buildpack/&quot;&gt;jgarber&amp;#39;s setup guide for the Octopress buildpack&lt;/a&gt;,
+with the exception of the Pygments setup, which is
+&lt;a href=&quot;http://jasongarber.com/blog/2012/01/10/deploying-octopress-to-heroku-with-a-custom-buildpack/#comment-750353224&quot;&gt;no longer required&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Also, since I&amp;#39;m using my own buildpack, the command for setting it up is
+different from the command in the guide I followed.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;heroku config:set &lt;span class=&quot;nv&quot;&gt;BUILDPACK_URL&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;https://github.com/pwnall/heroku-buildpack-ruby.git#octopress&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Discussion&lt;/h1&gt;
+
+&lt;p&gt;I really like that I have my contents in a portable form (Markdown), so I can
+migrate to a different blogging system, such as &lt;a href=&quot;https://ghost.org&quot;&gt;ghost&lt;/a&gt;,
+if I want to.&lt;/p&gt;
+
+&lt;p&gt;I don&amp;#39;t really like the Octopress theme. I like the styling in
+&lt;a href=&quot;https://ghost.org/features/&quot;&gt;ghost&lt;/a&gt; and the typography in
+&lt;a href=&quot;https://medium.com/&quot;&gt;medium&lt;/a&gt;. Octopress won because of its simple setup
+(Ghost stores images in the filesystem, so it doesn&amp;#39;t work well on Heroku),
+because it&amp;#39;s not restrictive (medium requires draft reviewers to log in with
+Twitter). Good support for code highlighting doesn&amp;#39;t hurt.&lt;/p&gt;
+
+&lt;p&gt;Given an unlimited amount of time, I would have used the
+&lt;a href=&quot;http://middlemanapp.com/&quot;&gt;middleman static site generator&lt;/a&gt; with its
+&lt;a href=&quot;http://middlemanapp.com/blogging/&quot;&gt;support for blogs&lt;/a&gt; and
+&lt;a href=&quot;https://github.com/middleman/middleman-syntax&quot;&gt;syntax highlighting&lt;/a&gt;.&lt;/p&gt;
+</description>
+        <pubDate>Tue, 29 Oct 2013 17:19:00 -0400</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/10/29/blog-setup/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/10/29/blog-setup/</guid>
+      </item>
+    
+      <item>
+        <title>Blink: Chromium&#39;s Rendering Engine</title>
+        <description>&lt;p&gt;&lt;a href=&quot;http://www.chromium.org/blink&quot;&gt;Blink&lt;/a&gt; is Google&amp;#39;s fork of the
+&lt;a href=&quot;https://www.webkit.org/&quot;&gt;WebKit browser engine&lt;/a&gt;, which in turn is Apple&amp;#39;s fork
+of KDE&amp;#39;s KHTML engine.&lt;/p&gt;
+
+&lt;h1&gt;WebKit Legacy&lt;/h1&gt;
+
+&lt;p&gt;WebKit (the precursor of Blink) was designed to be platform-independent, and
+was successfully ported to many platforms, such as Mac OS and iOS
+(using Cocoa), Windows, Linux (using GTK), and Android.
+Chromium was also designed to be ported to multiple platforms, and adds another
+platform-independent layer on top of the Blink rendering engine, called the
+content module. So, from the WebKit code perspective, Blink sits on top of a
+single platform, called &amp;quot;chromium&amp;quot;.&lt;/p&gt;
+
+&lt;p&gt;The WebKit project contains a rendering engine (WebCore), a JavaScript engine
+(JavaScriptCore), and an embedding layer. Blink adopted WebCore, but uses
+the &lt;a href=&quot;https://code.google.com/p/v8/&quot;&gt;V8 JavaScript Engine&lt;/a&gt; instead of
+JavaScriptCore, and dropped the embedding layer in favor of having its content
+layer talk directly to WebCore.&lt;/p&gt;
+
+&lt;h1&gt;Code Layout&lt;/h1&gt;
+
+&lt;p&gt;Blink&amp;#39;s source code is at
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/&quot;&gt;&lt;code&gt;third_party/WebKit&lt;/code&gt;&lt;/a&gt;
+in the &lt;a href=&quot;http://cs.chromium.org&quot;&gt;Chromium source tree&lt;/a&gt;. The top-level
+directories are as follows.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/public/&quot;&gt;&lt;code&gt;public/&lt;/code&gt;&lt;/a&gt;
+contains the header files makeing up the API between Blink and Chromium&amp;#39;s
+content layer.&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/&quot;&gt;&lt;code&gt;Source&lt;/code&gt;&lt;/a&gt;
+contains the actual Blink source code.&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/LayoutTests/&quot;&gt;&lt;code&gt;LayoutTests&lt;/code&gt;&lt;/a&gt;
+has automated tests for the engine&amp;#39;s features.&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Tools/&quot;&gt;&lt;code&gt;Tools&lt;/code&gt;&lt;/a&gt;
+contains scripts for building and running the code.
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Tools/&quot;&gt;&lt;code&gt;Tools/Scripts&lt;/code&gt;&lt;/a&gt;
+is heavily referenced in WebKit&amp;#39;s old&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;I have not explored the
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/PerformanceTests/&quot;&gt;&lt;code&gt;PerformanceTests&lt;/code&gt;&lt;/a&gt;
+or
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/ManualTests/&quot;&gt;&lt;code&gt;ManualTests&lt;/code&gt;&lt;/a&gt;
+directories. They appear to be described by the
+&lt;a href=&quot;http://trac.webkit.org/wiki/Performance%20Tests&quot;&gt;WebKit Wiki&amp;#39;s Performance Tests page&lt;/a&gt;
+and
+&lt;a href=&quot;http://trac.webkit.org/wiki/Performance%20Tests&quot;&gt;WebKit Wiki&amp;#39;s Manual Testing page&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;At the time of this writing,
+&lt;a href=&quot;https://trac.webkit.org/browser/trunk/&quot;&gt;WebKit&amp;#39;s source tree&lt;/a&gt; has the same
+top-level structure. Comparing the &lt;code&gt;Source/&lt;/code&gt; directories shows the top-level
+differences between Blink and WebKit.&lt;/p&gt;
+
+&lt;h2&gt;The Public API&lt;/h2&gt;
+
+&lt;p&gt;The headers in
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/public/&quot;&gt;&lt;code&gt;public/&lt;/code&gt;&lt;/a&gt;
+are relatively well-commented, so they make a great starting point for
+understanding a part of Chromium.&lt;/p&gt;
+
+&lt;p&gt;The public APIs fall into two big categories.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/public/web/&quot;&gt;&lt;code&gt;public/web&lt;/code&gt;&lt;/a&gt;
+contains the API implemented by Blink and called by Chromium&amp;#39;s content layer&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/public/platform/&quot;&gt;&lt;code&gt;public/platform&lt;/code&gt;&lt;/a&gt;
+has the lower-level API used by Blink and implemented by the content layer&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The classes in the public APIs usually have easy-to-guess corresponding classes
+in the implementation. For example, the &lt;code&gt;WebView&lt;/code&gt; abstract class, defined in
+&lt;a href=&quot;http://www.chromium.org/developers/testing/webkit-layout-tests&quot;&gt;&lt;code&gt;public/web/WebView.h&lt;/code&gt;&lt;/a&gt;,
+has one concrete implementation, &lt;code&gt;WebViewImpl&lt;/code&gt;, which is defined in
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/web/WebViewImpl.h&quot;&gt;&lt;code&gt;Source/web/WebViewImpl.h&lt;/code&gt;&lt;/a&gt;.
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/web/WebViewImpl.cpp&quot;&gt;&lt;code&gt;Source/web/WebViewImpl.cpp&lt;/code&gt;&lt;/a&gt;
+contains both the &lt;code&gt;WebViewImpl&lt;/code&gt; implementation, as well as the definitions for
+&lt;code&gt;WebView&lt;/code&gt;&amp;#39;s static members.&lt;/p&gt;
+
+&lt;h2&gt;The Source Code&lt;/h2&gt;
+
+&lt;p&gt;Blink&amp;#39;s implementation is split into the following top-level directories.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/web/&quot;&gt;&lt;code&gt;Source/web&lt;/code&gt;&lt;/a&gt;
+has the implementations of the public APIs in
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/public/web/&quot;&gt;&lt;code&gt;public/web&lt;/code&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/&quot;&gt;&lt;code&gt;Source/core&lt;/code&gt;&lt;/a&gt;
+has the WebCore implementation, and is the meat of the project&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/wtf/&quot;&gt;&lt;code&gt;Source/wtf&lt;/code&gt;&lt;/a&gt;
+defines primitive types that abstract over differences in the C++ compilers
+and standard libraries that Blink supports; wtf stands for Web Template
+Framework&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/platform/&quot;&gt;&lt;code&gt;Source/platform&lt;/code&gt;&lt;/a&gt;
+contains some lower-level code used by WebCore&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/modules/&quot;&gt;&lt;code&gt;Source/modules&lt;/code&gt;&lt;/a&gt;
+has implementations for some W3C specifications; for example, the
+&lt;a href=&quot;http://dev.w3.org/geo/api/spec-source.html&quot;&gt;Geolocation API Spefication&lt;/a&gt; is
+implemented in
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/modules/geolocation/&quot;&gt;&lt;code&gt;Source/modules/geolocation&lt;/code&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/bindings/&quot;&gt;&lt;code&gt;Source/bindings&lt;/code&gt;&lt;/a&gt;
+has the code that produces the glue connecting JavaScript code running inside
+the browser and WebCore; for example, this is what makes
+&lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/API/Document.querySelectorAll&quot;&gt;document.querySelectorAll&lt;/a&gt;
+inside JavaScript call into the
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/dom/Node.cpp&amp;amp;q=querySelectorAll&quot;&gt;WebCore::Node::querySelectorAll&lt;/a&gt;
+method in WebCore&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/web/&quot;&gt;&lt;code&gt;Source/inspector&lt;/code&gt;&lt;/a&gt;
+contains the specification of the
+&lt;a href=&quot;https://developers.google.com/chrome-developer-tools/docs/debugger-protocol&quot;&gt;Chrome remote debugging protocol&lt;/a&gt;,
+and the source code for the
+&lt;a href=&quot;https://developers.google.com/chrome-developer-tools/&quot;&gt;Chrome DevTools&lt;/a&gt;,
+which are implemented as a Web application that uses the remote debugging
+protocol&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/testing/&quot;&gt;&lt;code&gt;Source/testing&lt;/code&gt;&lt;/a&gt;
+has the source for the special binary used to run the Blink layout tests;
+this binary has additional JavaScript interfaces exposing Blink internals, to
+facilitate testing&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/build/&quot;&gt;&lt;code&gt;Source/build&lt;/code&gt;&lt;/a&gt;
+has an assortment of scripts used by the build process&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2&gt;The Layout Tests&lt;/h2&gt;
+
+&lt;p&gt;Blink&amp;#39;s regression tests are Web pages that are loaded in a content layer that
+is hacked to output textual representations of the pages. This is really
+convenient, because a Web application developer can contribute a failing test
+for a bug or feature without having to learn C++ or Blink&amp;#39;s inner workings.&lt;/p&gt;
+
+&lt;p&gt;To get a taste of what tests look like, skim
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/LayoutTests/fast/xmlhttprequest/xmlhttprequest-get.xhtml&quot;&gt;LayoutTests/fast/xmlhttprequest-get.xhtml&lt;/a&gt;
+and the corresponding
+&lt;a href=&quot;https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/LayoutTests/fast/xmlhttprequest/xmlhttprequest-get-expected.txt&quot;&gt;LayoutTests/fast/xmlhttprequest-get-expected.txt&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h1&gt;Building and Testing&lt;/h1&gt;
+
+&lt;p&gt;The &lt;code&gt;all_webkit&lt;/code&gt; target contains the Blink-related deliverables.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;ninja -C out/Debug blink_tests&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Blink cannot run on its own, due to its dependency on Chromium&amp;#39;s content layer.
+The &lt;em&gt;Content Shell&lt;/em&gt; offers a rudimentary UI on top of the content layer, and is
+a low-overhead way of getting Blink up and running.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;c&quot;&gt;# Linux&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;out/Debug/content_shell
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;c&quot;&gt;# OS X&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;5&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;out/Debug/Content&lt;span class=&quot;se&quot;&gt;\ &lt;/span&gt;Shell.app/Contents/MacOS/Content&lt;span class=&quot;se&quot;&gt;\ &lt;/span&gt;Shell&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Further Reading&lt;/h1&gt;
+
+&lt;p&gt;At the time of this writing, the
+&lt;a href=&quot;https://www.webkit.org/coding/technical-articles.html&quot;&gt;Technical Articles in the WebKit blog&lt;/a&gt;
+and many of the entries on the
+&lt;a href=&quot;http://trac.webkit.org/wiki&quot;&gt;WebKit Wiki&lt;/a&gt; are still relevant and worth the
+time spent reading them.&lt;/p&gt;
+
+&lt;h1&gt;References&lt;/h1&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/blink/public-c-api&quot;&gt;Blink Public C++ API&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/developers/content-module&quot;&gt;The Chromium Content Module&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/developers/how-tos/getting-around-the-chrome-source-code&quot;&gt;Getting around the Chrome Source Code&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://trac.webkit.org/wiki/SourceDirectory&quot;&gt;SourceDirectory in the WebKit Wiki&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.paulirish.com/2013/webkit-for-developers/&quot;&gt;WebKit for Developers&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+        <pubDate>Sun, 27 Oct 2013 07:50:00 -0400</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/10/27/blink-chromiums-rendering-engine/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/10/27/blink-chromiums-rendering-engine/</guid>
+      </item>
+    
+      <item>
+        <title>Logging in Chromium</title>
+        <description>&lt;p&gt;To me, &lt;em&gt;logging&lt;/em&gt; is a fancy way of saying &lt;code&gt;printf&lt;/code&gt;-debugging. In a large
+project, like Chromium, it comes in very handy for learning about the code.
+Strategically-placed logging statements can help you prove that a function is
+called in response to an action, or figure out the values that some parameters
+take.&lt;/p&gt;
+
+&lt;p&gt;Chromium puts together many different projects, and they all have their logging
+subsystems. I will cover logging for the projects that I worked with. That
+being said, I&amp;#39;m a people pleaser, so I am likely to add a project, if you ask
+nicely.&lt;/p&gt;
+
+&lt;h1&gt;Chromium&lt;/h1&gt;
+
+&lt;p&gt;The Chromium source code follows Google&amp;#39;s coding style, and the logging API
+resembles the API used in Google&amp;#39;s internal codebases. In particular, most
+logging statements are compiled in both the release and the debugging builds,
+and can be activated via command-line flags.&lt;/p&gt;
+
+&lt;p&gt;To enable Chromium logging, run your build with the following arguments.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;path/to/chromium --enable-logging&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;stderr --v&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Logging statemtents look like using streams in the C++ standard library.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;cp&quot;&gt;#include &amp;quot;base/logging.h&amp;quot;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;n&quot;&gt;VLOG&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&amp;quot;SomeFunction(&amp;quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;arg&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&amp;quot;)&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Using &lt;code&gt;DVLOG&lt;/code&gt; instead of &lt;code&gt;VLOG&lt;/code&gt; causes a logging statement not to be compiled
+into release builds. You shouldn&amp;#39;t worry about this while you use logging for
+exploratoraty purposes. When you get in a position to commit a logging
+statement, your code reviewer can help you figure out the specific logging
+statement that you should use.&lt;/p&gt;
+
+&lt;h1&gt;Blink&lt;/h1&gt;
+
+&lt;p&gt;The Blink source code in &lt;code&gt;/third_party/WebKit&lt;/code&gt; uses Apple-style logging.
+Most importantly, logging statements are only compiled in debugbuilds.
+Unfortunately, this means that if you need logging, you can&amp;#39;t use release
+builds, which are faster to produce.&lt;/p&gt;
+
+&lt;p&gt;To enable Blink logging, run your (debug) build with the following arguments.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;path/to/chromium --webcore-log-channels&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;Loading,ResourceLoading&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;The valid channels are defined in &lt;code&gt;Logging.cpp&lt;/code&gt; in the WebKit source tree. The
+file has moved in the recent past, so the command below is a good way of
+finding it.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src/third_party/WebKit
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;find . &lt;span class=&quot;p&quot;&gt;|&lt;/span&gt; grep Logging.cpp&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Logging statements look like &lt;code&gt;printf&lt;/code&gt; calls.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;cp&quot;&gt;#include &amp;quot;platform/Logging.h&amp;quot;&lt;/span&gt;
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt; &lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;n&quot;&gt;LOG&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Loading&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&amp;quot;ResourceFetcher::requestResource %s&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;url&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;latin1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;V8&lt;/h1&gt;
+
+&lt;p&gt;V8 can run on its own, so you should try to do your development that way
+whenever possible.&lt;/p&gt;
+
+&lt;p&gt;To enable V8 logging, run your build with the following arguments.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;path/to/chromium --js-flags&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;--log_all --logfile=-&amp;quot;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Running a tool such as &lt;code&gt;tick-processor&lt;/code&gt; requires that V8&amp;#39;s logging output is
+neatly separated from Chromium&amp;#39;s. To have V8 output its log to a file,
+Chromium&amp;#39;s sandbox must be disabled. By default, V8 logs to &lt;code&gt;v8.log&lt;/code&gt;.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;path/to/chromium --no-sandbox --js-flags&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;--log_all&amp;quot;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;I haven&amp;#39;t hacked on the V8 source code yet, so I don&amp;#39;t have an example of
+writing logging statements.&lt;/p&gt;
+
+&lt;h1&gt;References&lt;/h1&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/developers/how-tos/run-chromium-with-flags&quot;&gt;Run Chromium with flags&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/for-testers/enable-logging&quot;&gt;How to enable logging&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://codereview.chromium.org/6528016/&quot;&gt;CL: Expose WebCore log channels on the Chrome command line&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/v8/wiki/ProfilingChromiumWithV8&quot;&gt;Profiling Chromium with V8&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+        <pubDate>Fri, 25 Oct 2013 04:39:00 -0400</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/10/25/logging-in-chromium/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/10/25/logging-in-chromium/</guid>
+      </item>
+    
+      <item>
+        <title>Build Your Own Chromium</title>
+        <description>&lt;p&gt;I initially planned to start this series with some introductory material, such
+as giving a tour of the project, or explaining why I think contributing is a
+worthy endeavor.&lt;/p&gt;
+
+&lt;p&gt;At the same time, setting up Chromium will keep your development machine busy
+for a long time. Start this right away, so you won&amp;#39;t be blocked waiting for
+your computer later on.&lt;/p&gt;
+
+&lt;h1&gt;Prerequisites&lt;/h1&gt;
+
+&lt;p&gt;Chromium development requires a reasonably powerful machine. Your computer
+should have at least 4GB of RAM and at least 60GB of free disk space.&lt;/p&gt;
+
+&lt;p&gt;This article contains an easy way of getting a Chromium development
+environment. For the sake of simplicity, I made some decisions for you, and
+didn&amp;#39;t waste space documenting alternatives.&lt;/p&gt;
+
+&lt;p&gt;You can make different choices, and you&amp;#39;re responsible for figuring out how
+they impact my instructions. In general, you can get away with any change, as
+long as you can read the full Chromium guides, and use Google and StackOverflow
+to figure out error messages.&lt;/p&gt;
+
+&lt;h1&gt;Use a UNIX Operating System&lt;/h1&gt;
+
+&lt;p&gt;My articles assume you use a UNIX operating system. You&amp;#39;ll have the easiest
+time developing on OS X, but running it requires an Apple computer. For PCs,
+the best environment for Chromium development is the
+&lt;a href=&quot;http://www.ubuntu.com/download&quot;&gt;Ubuntu Linux distribution&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Mainstream Linux distributions, such as Fedora and Arch are also supported, but
+you&amp;#39;ll have to do a bit more research and debugging to if some of the commands
+don&amp;#39;t work right away.&lt;/p&gt;
+
+&lt;p&gt;Windows is not suitable for Chrome development, and I recommend against using
+it. The only good reason for running Windows on a machine is hardware support.
+If your machine needs Windows drivers, you should use a virtualization product,
+such as &lt;a href=&quot;https://www.virtualbox.org/wiki/Downloads&quot;&gt;VirtualBox&lt;/a&gt; or
+&lt;a href=&quot;http://www.vmware.com/go/downloadplayer/&quot;&gt;VMWare Player&lt;/a&gt;, and
+&lt;a href=&quot;http://www.ubuntu.com/download&quot;&gt;get Ubuntu Linux&lt;/a&gt;. You should allocate at
+least 4GB of RAM and 64 GB of disk space to the VM that you use to run Ubuntu.&lt;/p&gt;
+
+&lt;h1&gt;Install Git&lt;/h1&gt;
+
+&lt;p&gt;You need git to be able to contribute to many popular open-source software. If
+you don&amp;#39;t know how to use git, worry about that later. Remember we&amp;#39;re trying to
+kick off all the downloads you need to hack on Chromium, so you can read up on
+stuff you need while your dev machine downloads code.&lt;/p&gt;
+
+&lt;p&gt;On OS X, installing &lt;a href=&quot;https://developer.apple.com/xcode/&quot;&gt;Apple&amp;#39;s XCode&lt;/a&gt; will
+give you git and all the other tools you need to build Chromium.&lt;/p&gt;
+
+&lt;p&gt;On Ubuntu, run the command below in &lt;em&gt;Terminal&lt;/em&gt;. Other Linux distributions
+require similar commands.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;sudo apt-get install git&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Install depot_tools&lt;/h1&gt;
+
+&lt;p&gt;Chromium uses code from dozens (if not hundreds) of code repositories. The only
+sane way of getting all the code is to use depot_tools, which is their
+repository management software.&lt;/p&gt;
+
+&lt;p&gt;Copy-paste the commands below in &lt;em&gt;Terminal&lt;/em&gt;.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Set Your Environment Variables&lt;/h1&gt;
+
+&lt;p&gt;The Chromium tools use a few environment variables. To make your life easy,
+they should be always set on your development machine. The best way to achieve
+that is to add the lines below to &lt;code&gt;~/.bash_profile&lt;/code&gt; (on OS X) or to &lt;code&gt;~/.bashrc&lt;/code&gt;
+(on Linux).&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;GYP_GENERATORS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;ninja
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;PATH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$PATH&lt;/span&gt;:&lt;span class=&quot;nv&quot;&gt;$HOME&lt;/span&gt;/depot_tools
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;CHROME_DEVEL_SANDBOX&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$HOME&lt;/span&gt;/chromium/src/out/Debug/chrome_sandbox&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;On OS X, the easiest way of editing the file I mentioned is to run the commands
+below in &lt;em&gt;Terminal&lt;/em&gt;, and adding the lines above in the &lt;em&gt;TextEdit&lt;/em&gt; window that
+shows up.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;touch ~/.bash_profile
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;open ~/.bash_profile&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;On Ubuntu Linux, use the commands below instead.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;touch ~/.bashrc
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;gedit ~/.bashrc&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Get the Chromium Source Code&lt;/h1&gt;
+
+&lt;p&gt;You are now ready to download the all source code used to build Chromium. If
+you have a laptop, go to the place with the best Internet connection that you
+have access to, because you&amp;#39;ll be downloading a few gigabytes of code.&lt;/p&gt;
+
+&lt;p&gt;Run the commands below in &lt;em&gt;Terminal&lt;/em&gt;.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;mkdir chromium
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;chromium
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;fetch --nohooks chromium --nosvn&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;True&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Handling fetch Errors&lt;/h1&gt;
+
+&lt;p&gt;The fetch command may fail if either your Internet connection or Google&amp;#39;s
+server goes down during the (very long) download. If that happens, remove
+everything and try again.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;rm -rf chromium&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Get Libraries and Tools&lt;/h1&gt;
+
+&lt;p&gt;On OS X, XCode contains all the tools you need to build Chromium.&lt;/p&gt;
+
+&lt;p&gt;On Ubuntu, run the commands below in &lt;em&gt;Terminal&lt;/em&gt;.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;./build/install-build-deps.sh&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;For other Linux distributions, find the relevant section under
+&lt;em&gt;Distribution-specific Notes&lt;/em&gt; in
+&lt;a href=&quot;https://code.google.com/p/chromium/wiki/LinuxBuildInstructionsPrerequisites&quot;&gt;Chromium&amp;#39;s Linux Build Prerequisites wiki page&lt;/a&gt;,
+and follow the instructions there. The official instructions tend to be out of
+date, so read through the comments section on the page for updates.&lt;/p&gt;
+
+&lt;h1&gt;Build Chromium&lt;/h1&gt;
+
+&lt;p&gt;The Chromium build process takes up a few hours and all the CPU cycles that
+your machine has to spare, causing its fans to blow at full speed. Make sure
+this is appropriate in your environment.&lt;/p&gt;
+
+&lt;p&gt;Run the commands below in &lt;em&gt;Terminal&lt;/em&gt; to build Chromium.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;gclient runhooks --force
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;ninja -C out/Debug chrome&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h2&gt;Dealing with Build Errors&lt;/h2&gt;
+
+&lt;p&gt;If you&amp;#39;re unlucky, you might get build errors. This usually happens when some
+tool or library (such as the compiler installed by Xcode) is updated, and
+Chromium hasn&amp;#39;t caught up with the changes. Before trying anything else, update
+the source code using the commands below, then run the build commands above
+again.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;git pull &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; gclient sync&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;If you&amp;#39;re particularly unlucky, you&amp;#39;ll have to figure out the error by
+yourself. It usually comes down to missing a library or tool.&lt;/p&gt;
+
+&lt;p&gt;On OSX, setting up &lt;a href=&quot;http://brew.sh/&quot;&gt;homebrew&lt;/a&gt; is the easiest way to get
+missing libraries. On Ubuntu,
+&lt;a href=&quot;https://help.ubuntu.com/community/AutoApt&quot;&gt;auto-apt&lt;/a&gt; will help you figure out
+which package you need to install to get a missing file.&lt;/p&gt;
+
+&lt;h1&gt;Set Up the Sandbox&lt;/h1&gt;
+
+&lt;p&gt;Chromium uses sandboxing to reduce the amount of damage that a security
+vulnerability can cause. You don&amp;#39;t need to understand how it works right now,
+but you do need to run the commands below once to get your Chromium build
+running.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;ninja -C out/Debug chrome_sandbox
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;3&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;sudo chown root:root out/Debug/chrome_sandbox
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;4&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;sudo chmod &lt;span class=&quot;m&quot;&gt;4755&lt;/span&gt; out/Debug/chrome_sandbox&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;h1&gt;Run Chromium&lt;/h1&gt;
+
+&lt;p&gt;If you made it this far, your development machine is all set up for hacking on
+Chromium. Check your work by running the Chromium binary that you have just
+built.&lt;/p&gt;
+
+&lt;p&gt;On OS X, run the commands below.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;out/Debug/Chromium.app/Contents/MacOS/Chromium&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;On Linux, use these commands instead.&lt;/p&gt;
+
+&lt;figure class=&#39;code-highlight-figure&#39;&gt;&lt;div class=&#39;code-highlight&#39;&gt;&lt;pre class=&#39;code-highlight-pre&#39;&gt;&lt;div data-line=&#39;1&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/chromium/src
+&lt;/div&gt;&lt;/div&gt;&lt;div data-line=&#39;2&#39; class=&#39;code-highlight-row numbered&#39;&gt;&lt;div class=&#39;code-highlight-line&#39;&gt;out/Debug/chrome&lt;/div&gt;&lt;/div&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/figure&gt;
+
+&lt;p&gt;Congratulations! You are now ready to change the world!&lt;/p&gt;
+
+&lt;h1&gt;References&lt;/h1&gt;
+
+&lt;p&gt;I used information from the Chromium guides below.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/developers/how-tos/depottools&quot;&gt;Using depot_tools&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/developers/how-tos/get-the-code&quot;&gt;Get the Code&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/wiki/UsingGit&quot;&gt;Using Git&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/wiki/LinuxSUIDSandboxDevelopment&quot;&gt;Linux SUID Sandbox Development&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.chromium.org/blink/conversion-cheatsheet&quot;&gt;WebKit/Blink Conversion Cheatsheet&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/wiki/MacBuildInstructions&quot;&gt;Mac Build Instructions&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://code.google.com/p/chromium/wiki/LinuxBuildInstructions&quot;&gt;Linux Build Instructions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+        <pubDate>Thu, 24 Oct 2013 01:04:00 -0400</pubDate>
+        <link>http://pwnall.herokuapp.com/2013/10/24/build-your-own-chromium/</link>
+        <guid isPermaLink="true">http://pwnall.herokuapp.com/2013/10/24/build-your-own-chromium/</guid>
+      </item>
+    
+  </channel>
+</rss>
