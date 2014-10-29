@@ -4,10 +4,10 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>About</title>
+    <title>Blog Setup</title>
     <meta name="viewport" content="width=device-width">
     <meta name="description" content="Victor Costan is a Blink / Chromium committer and a WebKit contributor. This blog documents his attempts to understand the codebases and improve the Web platform.">
-    <link rel="canonical" href="http://pwnall.herokuapp.com/about/">
+    <link rel="canonical" href="http://pwnall.herokuapp.com/meta/2013/10/29/blog-setup/">
 
     <link rel="stylesheet" href="/css/main.css">
 <link href='/stylesheets/all-aba36069aee2ea08b5aaf5f01a03a74d.css' media='all' rel='stylesheet' type='text/css'>
@@ -54,15 +54,81 @@
       <div class="post">
 
   <header class="post-header">
-    <h1>About</h1>
+    <h1>Blog Setup</h1>
+    <p class="meta">Oct 29, 2013</p>
   </header>
 
   <article class="post-content">
-  <p>This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at <a href="http://jekyllrb.com/">jekyllrb.com</a></p>
+  <p>This article is a quick description of the software stack used to publish this
+blog.</p>
 
-<p>You can find the source code for the Jekyll new theme at: <a href="https://github.com/jglovier/jekyll-new">github.com/jglovier/jekyll-new</a></p>
+<h1>Octopress</h1>
 
-<p>You can find the source code for Jekyll at <a href="https://github.com/jekyll/jekyll">github.com/jekyll/jekyll</a></p>
+<p>The blog uses the <a href="https://github.com/imathis/octopress/tree/2.5">2.5 branch</a>
+of the <a href="http://octopress.org/">Octopress static blog generator</a>.</p>
+
+<p>I have set up the Octopress repository as a remote called <code>up</code> (upstream), and
+my <code>2.5</code> branch mirrors the matching Octopress branch. This means that I can
+adopt updates with the following commands.</p>
+
+<figure class='code-highlight-figure'><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'>git checkout 2.5
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>git pull up 2.5
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>git checkout master
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>git rebase 2.5</div></div></pre></div></figure>
+
+<p>I followed the official guides for
+<a href="http://octopress.org/docs/setup/">Initial Setup</a>,
+<a href="http://octopress.org/docs/configuring/">Configuration</a>, and
+<a href="http://octopress.org/docs/blogging/">Blogging</a>. Although they are written for
+Octopress 2.0, they still apply to 2.5.</p>
+
+<h1>Heroku</h1>
+
+<p>The blog is deployed on the <a href="https://www.heroku.com/">Heroku platform</a>, and
+using their generous free tier. I use one dyno and no plugins.</p>
+
+<p>I did not follow the Octopress deployment guide for Heroku, because I did not
+agree with the approach of checking in the generated static pages.</p>
+
+<p>Instead, I used an
+<a href="https://github.com/pwnall/heroku-buildpack-ruby">Octopress buildpack</a>,
+which generates the static pages when I push to Heroku&#39;s git repository.</p>
+
+<p>This build pack is basically
+<a href="https://github.com/heroku/heroku-buildpack-ruby">Heroku&#39;s official Ruby buildpack</a>,
+with the Octopress logic borrowed from
+<a href="https://github.com/jgarber/heroku-buildpack-ruby-octopress">jgarber&#39;s Octopress buildpack</a>.
+I&#39;m betting that Heroku will update their buildpack much more frequently than
+I&#39;ll have to update the Octopress bits, so I&#39;m using a rebasing workflow for
+the buildpack.</p>
+
+<p>I followed
+<a href="http://jasongarber.com/blog/2012/01/10/deploying-octopress-to-heroku-with-a-custom-buildpack/">jgarber&#39;s setup guide for the Octopress buildpack</a>,
+with the exception of the Pygments setup, which is
+<a href="http://jasongarber.com/blog/2012/01/10/deploying-octopress-to-heroku-with-a-custom-buildpack/#comment-750353224">no longer required</a></p>
+
+<p>Also, since I&#39;m using my own buildpack, the command for setting it up is
+different from the command in the guide I followed.</p>
+
+<figure class='code-highlight-figure'><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'>heroku config:set <span class="nv">BUILDPACK_URL</span><span class="o">=</span>https://github.com/pwnall/heroku-buildpack-ruby.git#octopress</div></div></pre></div></figure>
+
+<h1>Discussion</h1>
+
+<p>I really like that I have my contents in a portable form (Markdown), so I can
+migrate to a different blogging system, such as <a href="https://ghost.org">ghost</a>,
+if I want to.</p>
+
+<p>I don&#39;t really like the Octopress theme. I like the styling in
+<a href="https://ghost.org/features/">ghost</a> and the typography in
+<a href="https://medium.com/">medium</a>. Octopress won because of its simple setup
+(Ghost stores images in the filesystem, so it doesn&#39;t work well on Heroku),
+because it&#39;s not restrictive (medium requires draft reviewers to log in with
+Twitter). Good support for code highlighting doesn&#39;t hurt.</p>
+
+<p>Given an unlimited amount of time, I would have used the
+<a href="http://middlemanapp.com/">middleman static site generator</a> with its
+<a href="http://middlemanapp.com/blogging/">support for blogs</a> and
+<a href="https://github.com/middleman/middleman-syntax">syntax highlighting</a>.</p>
 
   </article>
 

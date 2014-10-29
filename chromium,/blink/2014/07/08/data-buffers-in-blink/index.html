@@ -4,10 +4,10 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>About</title>
+    <title>Data buffers in Blink</title>
     <meta name="viewport" content="width=device-width">
     <meta name="description" content="Victor Costan is a Blink / Chromium committer and a WebKit contributor. This blog documents his attempts to understand the codebases and improve the Web platform.">
-    <link rel="canonical" href="http://pwnall.herokuapp.com/about/">
+    <link rel="canonical" href="http://pwnall.herokuapp.com/chromium,/blink/2014/07/08/data-buffers-in-blink/">
 
     <link rel="stylesheet" href="/css/main.css">
 <link href='/stylesheets/all-aba36069aee2ea08b5aaf5f01a03a74d.css' media='all' rel='stylesheet' type='text/css'>
@@ -54,15 +54,24 @@
       <div class="post">
 
   <header class="post-header">
-    <h1>About</h1>
+    <h1>Data buffers in Blink</h1>
+    <p class="meta">Jul 8, 2014</p>
   </header>
 
   <article class="post-content">
-  <p>This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at <a href="http://jekyllrb.com/">jekyllrb.com</a></p>
+  <p>This article describes (some of) the classes used in Blink to represent data
+buffers.</p>
 
-<p>You can find the source code for the Jekyll new theme at: <a href="https://github.com/jglovier/jekyll-new">github.com/jglovier/jekyll-new</a></p>
+<h2>WebData</h2>
 
-<p>You can find the source code for Jekyll at <a href="https://github.com/jekyll/jekyll">github.com/jekyll/jekyll</a></p>
+<p><code>WebData</code> wraps a <code>SharedBuffer</code> instance. It is not thread-safe.</p>
+
+<p><code>WebData</code> is defined in
+<a href="https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/public/platform/WebData.h">public/platform/WebData.h</a>
+and implemented in
+<a href="https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/platform/exported/WebData.cpp">Source/platform/exported/WebData.cpp</a>.</p>
+
+<h2>WebThreadSafeData</h2>
 
   </article>
 
