@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Iterating on Mobile Apps at Web Speed</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Victor Costan is a Blink / Chromium committer and a WebKit contributor. This blog documents his attempts to understand the codebases and improve the Web platform.">
+    <link rel="canonical" href="http://pwnall.herokuapp.com/web/mobile/cordova/2014/11/08/iterating-on-mobile-apps-at-web-speed/">
+
+    <link rel="stylesheet" href="/css/main.css">
+<link href='/stylesheets/all-d79546f2ecf0a39c8dea4f33820c97fa.css' media='all' rel='stylesheet' type='text/css'>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="/">pwnall Hacking on Blink and Chromium</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+           viewBox="0 0 18 15" enable-background="new 0 0 18 15" xml:space="preserve">
+          <path fill="#505050" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0
+            h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#505050" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484
+            h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#505050" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0
+            c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+      <div class="trigger">
+        
+          <a class="page-link" href="/about/">About</a>
+        
+          <a class="page-link" href="/"></a>
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>Iterating on Mobile Apps at Web Speed</h1>
+    <p class="meta">Nov 8, 2014</p>
+  </header>
+
+  <article class="post-content">
+  <p>This article covers a collection of techniques that allow me to build HTML5
+applications with native capabilities, and iterate on my code using the
+edit-save-refresh cycle that is characteristic of Web development.</p>
+
+<h2>Motivation</h2>
+
+<p>I love building Web applications, and I&#39;m addicted to the edit-save-refresh
+cycle.</p>
+
+<p>At the same time, I miss many features that mobile app developers take for
+granted, but will take years to get through the Web standards gauntlet, such
+as <a href="http://www.w3.org/TR/wake-lock-use-cases/">WakeLock</a> and
+<a href="http://www.w3.org/TR/push-api/">Push notifications</a>. Security decisions that
+make perfect sense in the context of Web pages become really limiting for
+applications. For example, it is impossible to build an alarm clock, because
+the <code>play()</code> method on HTML5 media elements (<code>&lt;audio&gt;</code> and <code>&lt;video&gt;</code>) requires
+user interaction, at least on
+<a href="https://code.google.com/p/chromium/issues/detail?id=178297">Android</a>
+and
+<a href="https://developer.apple.com/library/safari/documentation/AudioVideo/Conceptual/Using_HTML5_Audio_Video/Device-SpecificConsiderations/Device-SpecificConsiderations.html#//apple_ref/doc/uid/TP40009523-CH5-SW4">iOS</a></p>
+
+<p>HTML5 application wrappers rose to respond to this challenge. A wrapper
+essentially bundles a browser component (usually known as a <code>WebView</code>),
+glue code that exposes native capabilities to the JavaScript inside the
+WebView, and the HTML, CSS and JS code that you supply. The first wrapper that
+I am aware of is <a href="https://github.com/appcelerator/titanium_mobile">Titanium</a>.</p>
+
+<p>Today&#39;s favorite wrapper, <a href="https://cordova.apache.org">Apache Cordova</a>, has
+made a lot of progress on the tooling front, but still uses the same bundling
+technique, which means that I have to build a native application, deploy it on
+my mobile device, and restart, whenever I want to make a change.</p>
+
+<h2>Outline and Code</h2>
+
+<p>The following sections will describe the tricks I used to restore the
+edit-save-refresh cycle inside a Cordova application container.</p>
+
+<p>Some tricks in this article can be repurposed for other wrappers easily, while
+some tricks are specific to Cordova&#39;s implementation. The latter may still
+suggest approaches to solving similar problems in different wrappers.</p>
+
+<p>I used the methods described here in the
+<a href="https://github.com/pwnall/html5-app-container">html5-app-container</a> project,
+which is open-sourced on GitHub. The code samples in this article lack some of
+the details in the GitHub project, in the interest of brevity and readability.
+I consider the GitHub project code to be the production-quality version that
+you should use for your applications.</p>
+
+<h2>Chapter 1: The Naive Solution</h2>
+
+<p>In order to be able to use edit-save-refresh, I have to get the Cordova
+container to load my application code from a server. The naive solution would
+be to simply navigate to the server&#39;s URL from the application&#39;s main page.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/index.html</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;script&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nb">window</span><span class="p">.</span><span class="nx">location</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000/&#39;</span><span class="p">;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;/script&gt;</span></div></div></pre></div></figure>
+
+<p>This is essentially the application code shipped with
+<a href="https://github.com/pwnall/html5-app-container/tree/5a7dd32f04170441e12113d97a49d90f9cc91645">the initial html5-app-container version</a>. The key files are
+<a href="https://github.com/pwnall/html5-app-container/blob/5a7dd32f04170441e12113d97a49d90f9cc91645/app/index.html">app/index.html</a>
+and
+<a href="https://github.com/pwnall/html5-app-container/blob/5a7dd32f04170441e12113d97a49d90f9cc91645/app/js/index.js">app/js/index.js</a>.</p>
+
+<p>While the application gets the edit-save-refresh cycle, it loses all the native
+Cordova functionality. This is because the native functionality uses the
+Cordova bridge, which is a fancy name for platform-specific hacks that let JavaScript code
+communicate with the native Cordova code. The Cordova bridge is initialized by
+loading a platform-specific <code>cordova.js</code> file that is placed along the HTML5
+application&#39;s files by the Cordova build chain.</p>
+
+<p>At this stage, it is tempting to attempt to load <code>cordova.js</code> from the Web
+site. This could work on Android, where the HTML5 application is accessible
+from <code>file:///android_asset/www/index.html</code>, but is doomed to fail on iOS,
+because the application path has a GUID in it, e.g.
+<code>file:///Users/pwnall/Library/Developer/CoreSimulator/Devices/CF0D2CC2-3E1B-49FB-BC59-AFE4FD4C65FD/data/Applications/75A1BEC5-6FBF-4E90-90B8-F4B8B22EF5B0/AppContainer.app/www/index.html</code>.</p>
+
+<p>Even if the complex path on iOS can be tamed,  Chrome&#39;s remote inspector
+reveals that accessing a <code>file:///android_asset</code> resource from a <code>http</code> origin
+causes a security error, as shown below.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>Web Application Snippet</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">&quot;file:///android_asset/www/cordova.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="c">&lt;!-- produces the following security error</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="c">Not allowed to load local resource: file:///android_asset/www/cordova.js</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="c">--&gt;</span></div></div></pre></div></figure>
+
+<p>Before moving on to the next attempt, it&#39;s worth noting that even the naive
+solution provides advantages over running the application from a Web browser.
+Cordova&#39;s WebView uses a security model that is better suited for applications,
+e.g. the <code>play()</code> method of HTML5 media elements can be called without user
+interaction.</p>
+
+<p>Furtermore, <a href="https://crosswalk-project.org/">the Crosswalk project</a> offers a
+Cordova fork that uses a WebView built on Chromium, instead of the platform&#39;s
+native WebView. This approach removes a lot of variability coming from the
+wide range of WebView versions shipped by device firmware. I can&#39;t recommend it
+strongly enough! In fact, I wasted a few months trying to build
+<a href="https://github.com/pwnall/chromeview">pretty much the same thing</a>, before this
+existed.</p>
+
+<p>Last, both Cordova and Crosswalk support debug and release builds. The debug
+builds set up the WebViews so that they can be debugged remotely. On iOS, the
+Cordova WebView can be debugged by
+<a href="http://webdesign.tutsplus.com/articles/quick-tip-using-web-inspector-to-debug-mobile-safari--webdesign-8787">Safari&#39;s Remote Inspector</a>.
+On Android, the Cordova WebView and the Crosswalk WebView can be debugged using
+<a href="https://developer.chrome.com/devtools/docs/remote-debugging">Chrome&#39;s Remote Debugger</a>.</p>
+
+<p>In both remote debuggers, hitting the Refresh keyboard shortcut (Command+R on
+Mac OS X, Control+R on all other systems) reloads the WebView. This is an
+important piece of the edit-save-refresh cycle, as having to reach out for the
+phone and close/reopen the application would be much slower than hitting
+Refresh on my development machine.</p>
+
+<h2>Chapter 2: The Iframe</h2>
+
+<p>The <code>&lt;iframe&gt;</code> element has introduced many security issues in the Web platform,
+so it seems fitting that we&#39;d try to use it to work around Cordova&#39;s
+restrictions.</p>
+
+<p>A reasonable design would be to have the actual application running inside a
+host page&#39;s <code>&lt;iframe&gt;</code>. The <code>&lt;iframe&gt;</code> takes up the host page&#39;s entire display
+space. The host page is the default Cordova starting page,
+<code>www/index.html</code>, so it can load <code>cordova.js</code> and talk to the Cordova
+bridge.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/index.html</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">&quot;cordova.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">&quot;js/index.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;iframe</span> <span class="na">id=</span><span class="s">&quot;iframe&quot;</span> <span class="na">src=</span><span class="s">&quot;blank.html&quot;</span> <span class="na">scrolling=</span><span class="s">&quot;no&quot;</span><span class="nt">&gt;&lt;/iframe&gt;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;style&gt;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nt">html</span><span class="o">,</span> <span class="nt">body</span><span class="o">,</span> <span class="nt">iframe</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">display</span><span class="o">:</span> <span class="k">block</span><span class="p">;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">width</span><span class="o">:</span> <span class="m">100%</span><span class="p">;</span> <span class="k">height</span><span class="o">:</span> <span class="m">100%</span><span class="p">;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">margin</span><span class="o">:</span> <span class="m">0</span><span class="p">;</span> <span class="k">border</span><span class="o">:</span> <span class="k">none</span><span class="p">;</span> <span class="k">padding</span><span class="o">:</span> <span class="m">0</span><span class="p">;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;/style&gt;</span></div></div></pre></div></figure>
+
+<p>The host page uses
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Window.postMessage">postMessage</a>
+to communicate with the application running inside the <code>&lt;iframe&gt;</code>.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/www/index.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">origin</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000&#39;</span><span class="p">;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">appUrl</span> <span class="o">=</span> <span class="nx">origin</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span><span class="p">;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;deviceready&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">iframe</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;iframe&#39;</span><span class="p">);</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nb">window</span><span class="p">.</span><span class="nx">iframe</span> <span class="o">=</span> <span class="nx">iframe</span><span class="p">;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">iframe</span><span class="p">.</span><span class="nx">src</span> <span class="o">=</span> <span class="nx">appUrl</span><span class="p">;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">iframe</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;iframe&#39;</span><span class="p">);</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">origin</span> <span class="o">!==</span> <span class="nx">origin</span><span class="p">)</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">25</span><span class="p">)</span> <span class="o">===</span> <span class="s1">&#39;html5-app-container-eval|&#39;</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">javaScript</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">25</span><span class="p">);</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">try</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='18' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">result</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nb">eval</span><span class="p">(</span><span class="nx">javaScript</span><span class="p">);</span>
+</div></div><div data-line='19' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="p">&#x7d;</span> <span class="k">catch</span><span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='20' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">result</span> <span class="o">=</span> <span class="nx">e</span><span class="p">;</span>
+</div></div><div data-line='21' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="p">&#x7d;</span>
+</div></div><div data-line='22' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span>
+</div></div><div data-line='23' class='code-highlight-row numbered'><div class='code-highlight-line'>          <span class="s1">&#39;html5-app-container-evaled|&#39;</span> <span class="o">+</span> <span class="nx">result</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</div></div><div data-line='24' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='25' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='26' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;)();</span></div></div></pre></div></figure>
+
+<p>To keep the initialization process simple, the host page first waits until the
+Cordova bridge is initialized, and then loads the Web application in the
+<code>&lt;iframe&gt;</code>.</p>
+
+<p>The <code>postMessage</code> receiver only accepts messages whose origin matches the Web
+application. This prevents hostile content, such as embedded ads, from
+obtaining native capabilities.</p>
+
+<p>The receiver shown above is simple by design. It essentially <code>eval()</code>s the
+received message and responds with a message that contains the evaluation
+result. Using <code>eval</code> means that I can iterate on all the interesting code by
+changing the Web application code.</p>
+
+<p>The main drawback of this approach is that sending JavaScript strings to the
+host page is an unnatural technique for developing Web applications, and can
+get tedious as the code that interacts with native features becomes more
+complex. <a href="http://rubyonrails.org/">Rails</a> (my Web framework of choice) does not
+have good support for putting together JavaScript strings, and this was a
+deal-breaker for me.</p>
+
+<p>The second drawback is that debugging my application with Chrome or Safari&#39;s
+remote inspector is a bit more tedious. In order to see my page&#39;s elements, I
+have to peek into the host page&#39;s <code>&lt;iframe&gt;</code>. To play with the JavaScript
+objects, I have to access the <code>&lt;iframe&gt;</code>&#39;s <code>contentWindow</code>. The <code>deviceready</code>
+handler code posted above assigins the <code>&lt;iframe&gt;</code> element to the <code>iframe</code>
+property on the host page&#39;s window, to make debugging slightly easier.</p>
+
+<p>Last, I was worried that as I use data-intensive features, such as
+<a href="http://plugins.cordova.io/#/package/org.apache.cordova.file">Cordova&#39;s File API</a>,
+shuttling large strings around might become a performance bottleneck.</p>
+
+<p>Fortunately, we can do better!</p>
+
+<h2>Chapter 3: The Iframe Grows Stronger</h2>
+
+<p>This section describes a trick that removes the need to <code>postMessage</code> strings
+to the host page in most cases, by giving the Web application inside the
+<code>&lt;iframe&gt;</code> direct access to Cordova&#39;s native objects. This makes the <code>&lt;iframe&gt;</code>
+approach more bearable.</p>
+
+<p>In a nutshell, after the Web application loads inside the <code>&lt;iframe</code>&gt;, it posts
+a message to the host page, asking it to copy the references to Cordova&#39;s
+objects to the <code>&lt;iframe&gt;</code>&#39;s window object. For generality, the host page
+creates an empty object, copies all the enumerable properties of its window
+into the newly created object, then assigs the object to a property on the
+<code>&lt;iframe&gt;</code>&#39;s window.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/js/index.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">origin</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000&#39;</span><span class="p">;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">appUrl</span> <span class="o">=</span> <span class="nx">origin</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span><span class="p">;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;deviceready&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">iframe</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;iframe&#39;</span><span class="p">);</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nb">window</span><span class="p">.</span><span class="nx">iframe</span> <span class="o">=</span> <span class="nx">iframe</span><span class="p">;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">iframe</span><span class="p">.</span><span class="nx">src</span> <span class="o">=</span> <span class="nx">appUrl</span><span class="p">;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">iframe</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;iframe&#39;</span><span class="p">);</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">data</span> <span class="o">===</span> <span class="s1">&#39;html5-app-container-wire-me&#39;</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">platform</span> <span class="o">=</span> <span class="p">&#x7b;&#x7d;;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nx">cordovaPlatform</span> <span class="o">=</span> <span class="nx">platform</span><span class="p">;</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">properties</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">getOwnPropertyNames</span><span class="p">(</span><span class="nb">window</span><span class="p">);</span>
+</div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">_length</span> <span class="o">=</span> <span class="nx">properties</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span>
+</div></div><div data-line='18' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">for</span><span class="p">(</span><span class="kd">var</span> <span class="nx">index</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">index</span> <span class="o">&lt;</span> <span class="nx">_length</span><span class="p">;</span> <span class="o">++</span><span class="nx">index</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='19' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="kd">var</span> <span class="nx">name</span> <span class="o">=</span> <span class="nx">properties</span><span class="p">[</span><span class="nx">index</span><span class="p">];</span>
+</div></div><div data-line='20' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">platform</span><span class="p">[</span><span class="nx">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">window</span><span class="p">[</span><span class="nx">name</span><span class="p">];</span>
+</div></div><div data-line='21' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="p">&#x7d;</span>
+</div></div><div data-line='22' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span><span class="s1">&#39;html5-app-container-wired-you&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</div></div><div data-line='23' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='24' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='25' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;)();</span></div></div></pre></div></figure>
+
+<p>Note that the host page still waits for the Cordova bridge to be fully
+initialized before navigating the <code>&lt;iframe&gt;</code> to the Web application. This
+guarantees that the host page&#39;s window contains Cordova&#39;s native objects by
+the time the <code>postMessage</code> receiver is invoked.</p>
+
+<p><a href="https://github.com/pwnall/html5-app-container/tree/9e53f5553d36dae4973bbd4dcbf463258cf3885e">The second major html5-app-container version</a>
+implements the trick above, combined with the <code>eval()</code> receiver described in
+the previous section. The key files are
+<a href="https://github.com/pwnall/html5-app-container/blob/9e53f5553d36dae4973bbd4dcbf463258cf3885e/app/index.html">app/index.html</a>
+and
+<a href="https://github.com/pwnall/html5-app-container/blob/9e53f5553d36dae4973bbd4dcbf463258cf3885e/app/js/index.js">app/js/index.js</a>.</p>
+
+<p>Unfortunately, this trick
+<a href="https://crosswalk-project.org/jira/browse/XWALK-2905">does not work in Crosswalk 10+</a>,
+so I had to look for a better solution.  However, it is worth knowing, as it
+still works in Cordova, and might come in handy when dealing with other HTML5
+application wrappers.</p>
+
+<h2>Chapter 4: The Demise of the Iframe</h2>
+
+<p>A different approach to obtaining native capabilities is to attempt to
+initialize the Cordova bridge in the Web application.</p>
+
+<p>In this case, we don&#39;t embed any code in the Cordova application. Instead, we
+add a <a href="http://cordova.apache.org/docs/en/4.0.0/config_ref_index.md.html">config.xml</a>
+whose <code>&lt;access&gt;</code> points to our Web application.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>assets/config.xml</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="cp">&lt;?xml version=&#39;1.0&#39; encoding=&#39;utf-8&#39;?&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;widget</span> <span class="na">id=</span><span class="s">&quot;us.costan.app_container&quot;</span> <span class="na">version=</span><span class="s">&quot;1.0.0&quot;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="na">xmlns=</span><span class="s">&quot;http://www.w3.org/ns/widgets&quot;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="na">xmlns:cdv=</span><span class="s">&quot;http://cordova.apache.org/ns/1.0&quot;</span><span class="nt">&gt;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;name&gt;</span>AppContainer<span class="nt">&lt;/name&gt;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;description&gt;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>        Web Application Container
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;/description&gt;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;author</span> <span class="na">email=</span><span class="s">&quot;victor@costan.us&quot;</span> <span class="na">href=</span><span class="s">&quot;www.costan.us&quot;</span><span class="nt">&gt;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>        Victor Costan
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;/author&gt;</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;content</span> <span class="na">src=</span><span class="s">&quot;http://webapp.com:3000/&quot;</span> <span class="nt">/&gt;</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nt">&lt;access</span> <span class="na">origin=</span><span class="s">&quot;*&quot;</span> <span class="nt">/&gt;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nt">&lt;/widget&gt;</span></div></div></pre></div></figure>
+
+<p>According to <a href="https://issues.apache.org/jira/browse/CB-5988">Cordova Bug 5988</a>,
+the Cordova bridge can be used from a <code>file://</code> origin, or from the top level
+page&#39;s origin. So, if we can obtain the platform-specific JavaScript in the Web
+application, we can execute it and gain access to Cordova&#39;s native features.</p>
+
+<p>Fortunately, Cordova&#39;s JavaScript is well-structured, and collected in the
+platform-specific assets directory for each platform. For example, the Android
+JavaScript is all in <code>platforms/android/assets/www</code> and the iOS JavaScript is
+in <code>platforms/ios/www</code>.</p>
+
+<p>The first file we need is <code>cordova.js</code>, the build product of the
+<a href="https://github.com/apache/cordova-js">cordova-js project</a>. As far as we&#39;re
+concerned, it implements Cordova&#39;s module system (<code>cordova.define</code> and
+<code>cordova.require</code>), and contains the platform-specific bootstrap code.</p>
+
+<p>The second file we must extract is <code>cordova_plugins.js</code>, in the same directory.
+It defines the <code>cordova/plugin_list</code> module, which exports a list of all the
+plugins installed in the application.</p>
+
+<p>The other files needed to set up the bridge are spread throughout the
+<code>plugins/</code> directory. A reasonable method for obtaining them is recusively
+looking for <code>.js</code> files inside the <code>plugins/</code> directory. In order to avoid
+including any test code, we can filter out the files that don&#39;t start with
+<code>cordova.define</code>.</p>
+
+<p>We can collect and concatenate all the files for each platform into one big
+bundle file, e.g. <code>android.js</code> for Android, and <code>ios.js</code> for iOS. In the Web
+application, we need to detect whether we&#39;re running under Cordova and, if so,
+load the appropriate bundle.</p>
+
+<p>I use <a href="http://guides.rubyonrails.org/asset_pipeline.html">the Rails asset pipeline</a>
+to serve the JavaScript files, as it does all the tricks needed to serve them
+with long-lived cache expiration dates. In order for this to work, I need to
+use asset pipeline-generated URLs to load the scripts.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>app/assets/javascripts/platform_scripts.js.erb</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nb">window</span><span class="p">.</span><span class="nx">PlatformScripts</span> <span class="o">=</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">android</span><span class="o">:</span> <span class="o">&lt;%=</span> <span class="nx">javascript_path</span><span class="p">(</span><span class="s1">&#39;cordova/android.js&#39;</span><span class="p">).</span><span class="nx">to_json</span> <span class="o">%&gt;</span><span class="p">,</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">ios</span><span class="o">:</span> <span class="o">&lt;%=</span> <span class="nx">javascript_path</span><span class="p">(</span><span class="s1">&#39;cordova/ios.js&#39;</span><span class="p">).</span><span class="nx">to_json</span> <span class="o">%&gt;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span></div></div></pre></div></figure>
+
+<p>The JavaScript bundles must not be executed when the Web application does not
+run under Cordova. For example, the Android bundle currently uses
+<code>window.prompt()</code> to talk to the native Cordova code. If this code runs outside
+Cordova, the user will be presented with cryptic dialog boxes. In order to
+avoid that, we must make sure that we run under Cordova before executing any
+Cordova JavaScript.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>app/assets/javascripts/platform.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nb">window</span><span class="p">.</span><span class="nx">Platform</span> <span class="o">=</span> <span class="p">&#x7b;&#x7d;;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="c1">// Returns &quot;android&quot;, &quot;ios&quot;, or null if not running under Cordova.</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nx">Platform</span><span class="p">.</span><span class="nx">cordovaPlatform</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">ua</span> <span class="o">=</span> <span class="nx">navigator</span><span class="p">.</span><span class="nx">userAgent</span><span class="p">;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="sr">/android/i</span><span class="p">.</span><span class="nx">test</span><span class="p">(</span><span class="nx">ua</span><span class="p">))</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span><span class="p">(</span><span class="nb">window</span><span class="p">.</span><span class="nx">_cordovaNative</span><span class="p">)</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span> <span class="s1">&#39;android&#39;</span><span class="p">;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="sr">/iphone|ipad|ipod/i</span><span class="p">.</span><span class="nx">test</span><span class="p">(</span><span class="nx">ua</span><span class="p">))</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="err">\</span><span class="p">(</span><span class="err">\</span><span class="nx">d</span><span class="o">+</span><span class="err">\</span><span class="p">)</span><span class="nx">$</span><span class="o">/</span><span class="p">.</span><span class="nx">test</span><span class="p">(</span><span class="nx">ua</span><span class="p">))</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span> <span class="s1">&#39;ios&#39;</span><span class="p">;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">return</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span></div></div></pre></div></figure>
+
+<p>The code above takes advantage of Cordova implementation details, and was
+derived from Cordova 3.6. On Android, Cordova defines a <code>_cordovaNative</code>
+object. On iOS, Cordova appends a numeric nonce wrapped in parantheses to the
+WebView&#39;s <code>User-Agent</code> property.</p>
+
+<p>If the Web application detects that it runs under Cordova, a <code>&lt;script&gt;</code> tag
+pointing to the appropriate script is dynamically generated and added to the
+page.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>app/assets/javascripts/platform.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="c1">// Calls the callback with true (success) or false (failure).</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nx">Platform</span><span class="p">.</span><span class="nx">bootCordova</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">platform</span> <span class="o">=</span> <span class="nx">Platform</span><span class="p">.</span><span class="nx">cordovaPlatform</span><span class="p">();</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">platform</span> <span class="o">===</span> <span class="kc">null</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">callback</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">element</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="s1">&#39;script&#39;</span><span class="p">);</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">element</span><span class="p">.</span><span class="nx">src</span> <span class="o">=</span> <span class="nx">PlatformScripts</span><span class="p">[</span><span class="nx">platform</span><span class="p">];</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">document</span><span class="p">.</span><span class="nx">getElementsByTagName</span><span class="p">(</span><span class="s1">&#39;head&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">].</span><span class="nx">appendChild</span><span class="p">(</span><span class="nx">element</span><span class="p">);</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;deviceready&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">callback</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;);</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span></div></div></pre></div></figure>
+
+<p>While implementing this approach, I ran over a
+<a href="https://crosswalk-project.org/jira/browse/XWALK-2907">Crosswalk crashing bug</a>
+that brings down the entire Android application when a non-<code>file://</code> page
+attempts to initialize the Cordova bridge. Fortunately, I was able to find and
+submit a fix.</p>
+
+<p><a href="https://github.com/pwnall/html5-app-container/tree/4e0f66d0f805264bafbfe6e242aecc9ba8014ca1">The third major html5-app-container version</a>
+uses the approach outlined in this section. The only application file is
+<a href="https://github.com/pwnall/html5-app-container/blob/4e0f66d0f805264bafbfe6e242aecc9ba8014ca1/app/config.xml">app/config.xml</a>.
+The Cordova JavaScript specific to Android and iOS is collected by two bash
+scripts,
+<a href="https://github.com/pwnall/html5-app-container/blob/4e0f66d0f805264bafbfe6e242aecc9ba8014ca1/script/bundle-android.sh">script/bundle-android.sh</a>
+and
+<a href="https://github.com/pwnall/html5-app-container/blob/4e0f66d0f805264bafbfe6e242aecc9ba8014ca1/script/bundle-ios.sh">script/bundle-ios.sh</a>.</p>
+
+<p>This method addresses the main issues raised by the <code>&lt;iframe&gt;</code> approach. The
+Web application does not need to <code>postMessage</code> JavaScript strings to a host
+page, and the Chrome and Safari remote inspectors display the Web application&#39;s
+elements and interact directly with the application&#39;s JavaScript world.</p>
+
+<p>Unfortunately, this method&#39;s requirement of hosting Cordova&#39;s platform-specific
+JavaScript bndles on the server introduces significant complexity in long-lived
+production applications. For example, if a
+<a href="http://cordova.apache.org/announcements/2014/08/04/android-351.html">security issue</a>
+is reported in the Cordova version used by the application wrappper, a new
+version of the wrapper must be released. New bundles must be produced and
+deployed on the production server before the new wrapper can be released.
+Furthermore, the Web application must retain the bundles for all the wrapper
+versions that were ever released.</p>
+
+<p>From a performance standpoint, this approach has the downside of having to load
+the platform-specific JavaScript over the network. The Android-specific
+JavaScript file has almost 300kb, and the iOS-specific JavaScript is slightly
+biggger. Furthermore, the file is loaded via a dynamically-added <code>&lt;script&gt;</code>
+tag, which eludes
+<a href="http://andydavies.me/blog/2013/10/22/how-the-browser-pre-loader-makes-pages-load-faster/">the pre-loader</a>.</p>
+
+<p>The Rails asset pipeline sweetens the performance blow quite a bit, as the file
+is 26kb after minifying and gzipping, and is served with a long-lived cache
+expiration date. Still, it&#39;s nice to know that the following refinement removes
+the performance issue completely, while being easier to maintain at the same
+time.</p>
+
+<h2>Chapter 5: The Return of the Iframe</h2>
+
+<p>In this section, we modify the approach presented above to remove the need for
+server-hosted JavaScript bundles. The high-level idea is rather
+straightforward, namely we must restructure our code so that the Web
+application receives the JavaScript bundle from the Cordova wrapper. However,
+we need a couple of tricks to bypass the security measures in Cordova&#39;s
+WebView.</p>
+
+<p>First, the build scripts for the Cordova-based wrapper must be augmented to
+extract the JavaScript bundle, as described in the previous section.</p>
+
+<p>This is mildly tricky, because the Cordova build scripts wipe the <code>www</code>
+directory inside the platform-specific <code>platforms/</code> subdirectory at the
+beginning of a build. Fortunately, the script copies the platform-specific
+<code>cordova.js</code> from the <code>platform_www</code> directory inside the platform&#39;s
+<code>platforms/</code> subdirectory, so we can stash our JavaScript bundle there.</p>
+
+<p>Also, we minify the JavaScript bundle using
+<a href="https://github.com/mishoo/UglifyJS2">UglifyJS 2</a>. On the Andoid and iOS
+bundles, minification cut down about 300k of JavaScript to less than 100k. This
+matters because we&#39;ll store the bundle in
+<a href="https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage#sessionStorage">sessionStorage</a>,
+which is read synchronously from JavaScript.</p>
+
+<p>Second, we must send the JavaScript bundle to the Web application, despite the
+fact that it cannot read <code>file://</code> resources. We bypass this limitation by
+resurrecting the <code>&lt;iframe&gt;</code> technique discussed earlier.</p>
+
+<p>The application wrapper includes a host page that loads a bootstrap page from
+our Web application in a hidden <code>&lt;iframe&gt;</code>.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/index.html</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="nx">iframe</span> <span class="nx">id</span><span class="o">=</span><span class="s2">&quot;iframe&quot;</span> <span class="nx">src</span><span class="o">=</span><span class="s2">&quot;blank.html&quot;</span> <span class="nx">style</span><span class="o">=</span><span class="s2">&quot;display: none;&quot;</span><span class="o">&gt;&lt;</span><span class="err">/iframe&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="nx">script</span> <span class="nx">src</span><span class="o">=</span><span class="s2">&quot;js/index.js&quot;</span><span class="o">&gt;&lt;</span><span class="err">/script&gt;</span></div></div></pre></div></figure>
+
+<p>The bootstrap page receives the JS bundle from the host page via <code>postMessage</code>
+and stores it in its <code>sessionStorage</code>. Note that the bootstrap page must be
+hosted by the Web application, because the <code>sessionStorage</code> store is
+per-origin. After the bundle is stored, the bootstrap page sends a message to
+the host message telling it to navigate to the Web application&#39;s main page. The
+main page URL is contained in the message so that the application wrapper only
+needs to hard-code one URL, namely the bootstrap page&#39;s URL.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>Sample Bootstrap Page</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="nx">script</span><span class="o">&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">origin</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span> <span class="o">!==</span> <span class="s1">&#39;file://&#39;</span><span class="p">)</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="o">!==</span> <span class="s1">&#39;cordovaJs|&#39;</span><span class="p">)</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">sessionStorage</span><span class="p">.</span><span class="nx">setItem</span><span class="p">(</span><span class="s1">&#39;cordova-js&#39;</span><span class="p">,</span> <span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">parent</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span><span class="s1">&#39;jump|http://webapp.com:3000/&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;);</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="k">if</span> <span class="p">(</span><span class="nb">window</span><span class="p">.</span><span class="nx">parent</span> <span class="o">!==</span> <span class="nb">window</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">parent</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span><span class="s1">&#39;getjs&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="err">/script&gt;</span></div></div></pre></div></figure>
+
+<p>The host page JavaScript below looks large, but it can be de-constructed into
+small straightforward parts. The <code>getBundle</code> function uses
+<a href="http://www.w3.org/TR/XMLHttpRequest/">XMLHttpRequest</a> to read the JavaScript
+bundle. The <code>onMessage</code> function implements the <code>postMessage</code>-based protocol
+used to communicate with the Web application&#39;s bootstrap page, and is similar
+to the code for the <code>&lt;iframe&gt;</code>-based approach presented above.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/js/index.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">bootstrapUrl</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000/cordova&#39;</span><span class="p">;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">bootstrapOrigin</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000&#39;</span><span class="p">;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Issues an XHR get and passes the response String to the callback function.</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getUrl</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="nx">absoluteUrl</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">onreadystatechange</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">xhr</span><span class="p">.</span><span class="nx">readyState</span> <span class="o">!==</span> <span class="mi">4</span><span class="p">)</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">xhr</span><span class="p">.</span><span class="nx">responseText</span> <span class="o">||</span> <span class="nx">xhr</span><span class="p">.</span><span class="nx">response</span><span class="p">;</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">callback</span><span class="p">(</span><span class="nx">data</span><span class="p">);</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">send</span><span class="p">();</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='18' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Loads the JS bundle via XHR and passes it to the callback function.</span>
+</div></div><div data-line='19' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getBundle</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='20' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">pageUrl</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span><span class="p">;</span>
+</div></div><div data-line='21' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">slash</span> <span class="o">=</span> <span class="nx">pageUrl</span><span class="p">.</span><span class="nx">lastIndexOf</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">);</span>
+</div></div><div data-line='22' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">absoluteUrl</span> <span class="o">=</span> <span class="nx">pageUrl</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nx">slash</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;cordova_all.min.js&#39;</span><span class="p">;</span>
+</div></div><div data-line='23' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">getUrl</span><span class="p">(</span><span class="nx">absoluteUrl</span><span class="p">,</span> <span class="nx">callback</span><span class="p">);</span>
+</div></div><div data-line='24' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='25' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='26' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Load the bootstrap URL in the iframe.</span>
+</div></div><div data-line='27' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">iframe</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;iframe&#39;</span><span class="p">);</span>
+</div></div><div data-line='28' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">iframe</span><span class="p">.</span><span class="nx">src</span> <span class="o">=</span> <span class="nx">bootstrapUrl</span><span class="p">;</span>
+</div></div><div data-line='29' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='30' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// The postMessage protocol used to talk to the bootstrap page.</span>
+</div></div><div data-line='31' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">onMessage</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='32' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">origin</span> <span class="o">!==</span> <span class="nx">bootstrapOrigin</span><span class="p">)</span>
+</div></div><div data-line='33' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='34' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</div></div><div data-line='35' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">data</span> <span class="o">===</span> <span class="s1">&#39;getjs&#39;</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='36' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">getBundle</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">cordovaJs</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='37' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span>
+</div></div><div data-line='38' class='code-highlight-row numbered'><div class='code-highlight-line'>            <span class="s1">&#39;cordovaJs|&#39;</span> <span class="o">+</span> <span class="nx">cordovaJs</span><span class="p">,</span> <span class="nx">bootstrapOrigin</span><span class="p">);</span>
+</div></div><div data-line='39' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="p">&#x7d;);</span>
+</div></div><div data-line='40' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='41' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span> <span class="o">===</span> <span class="s1">&#39;jump|&#39;</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='42' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nb">window</span><span class="p">.</span><span class="nx">removeEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="nx">onMessage</span><span class="p">);</span>
+</div></div><div data-line='43' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nb">window</span><span class="p">.</span><span class="nx">location</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span>
+</div></div><div data-line='44' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='45' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='46' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="nx">onMessage</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='47' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;)();</span></div></div></pre></div></figure>
+
+<p>Note that after the JavaScript bundle transfer is complete, the host page&#39;s
+code navigates the top-level window to the Web application&#39;s main URL. So,
+after the bundle transfer, the Web application takes over the entire Cordova
+WebView, as opposed to being contained inside an <code>&lt;iframe&gt;</code>, so the drawbacks
+of the <code>&lt;iframe&gt;</code>-based solution do not apply.</p>
+
+<p>This method also does not require the Web application to rely on Cordova
+implementation details to detect whether it runs inside a Cordova container or
+not. Instead, application code can simply probe <code>sessionStorage</code> for the
+Cordova JavaScript bundle.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>app/assets/javascripts/platform.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="c1">// Calls the callback with true (success) or false (failure).</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="nx">Platform</span><span class="p">.</span><span class="nx">bootCordova</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">cordovaJs</span> <span class="o">=</span> <span class="nx">sessionStorage</span><span class="p">.</span><span class="nx">getItem</span><span class="p">(</span><span class="s1">&#39;cordova-js&#39;</span><span class="p">);</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">cordovaJs</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">callback</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;deviceready&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">callback</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;);</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nb">eval</span><span class="p">(</span><span class="nx">cordovaJs</span><span class="p">);</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span></div></div></pre></div></figure>
+
+<p>This was implemented in
+<a href="https://github.com/pwnall/html5-app-container/tree/4fe783bb58641fdebb87fd048fca0fdf2030863c">the 4th major html5-app-container version</a>
+uses the approach outlined in this section. The host page HTML is
+<a href="https://github.com/pwnall/html5-app-container/blob/4fe783bb58641fdebb87fd048fca0fdf2030863c/app/index.html">app/index.html</a>
+and the loader code is in
+<a href="https://github.com/pwnall/html5-app-container/blob/4fe783bb58641fdebb87fd048fca0fdf2030863c/app/js/loader.js">app/js/loader.js</a>.
+The Cordova JavaScript bundles are collected by
+<a href="https://github.com/pwnall/html5-app-container/blob/4fe783bb58641fdebb87fd048fca0fdf2030863c/script/build-ios.sh">script/bundle-ios.sh</a>,
+which (confusingly) builds the Cordova-based wrapper for both iOS and Android.
+<a href="https://github.com/pwnall/html5-app-container/blob/4fe783bb58641fdebb87fd048fca0fdf2030863c/script/build-android.sh">script/bundle-android.sh</a>
+builds an Android wrapper using the Crosswalk fork of Cordova.</p>
+
+<p>Unfortunately, the code here has an XSS (cross-site scripting) vulnerability.
+If an attacker convinces a user to download a malicious HTML page and open the
+downloaded version, such that it gets the <code>file://</code> origin, the malicious page
+can open our Web application&#39;s bootstrap page in an <code>&lt;iframe&gt;</code> and use the
+<code>postMessage</code> protocol to convince the bootstrap page to store some evil
+JavaScript in <code>sessionStorage</code>. If the user then visits our Web application
+from the same computer, the application will run the attacker&#39;s evil
+JavaScript.</p>
+
+<h2>Chapter 6: The Revenge of the Iframe</h2>
+
+<p>In order to fix the XSS vulnerability, we apply a well-known method for
+preventing against CSRF (cross-site request forgery) vulnerabilities.</p>
+
+<p>The Web application&#39;s bootstrap page generates a random token and places it
+inside a <code>&lt;div&gt;</code> attribute in its DOM tree. The application wrapper uses its
+privileges to extract the token from the <code>&lt;div&gt;</code> element, and sends the token
+together with the Cordova JavaScript. The bootstrap does not write to
+<code>sessionStore</code> if the token in the message doesn&#39;t match the value that it
+generated.</p>
+
+<p>The main source of complexity in the updated bootstrap page code (shown below)
+is the token generation code. We first attempt to generate a cryptographically
+secure token, using the <a href="http://www.w3.org/TR/WebCryptoAPI/">WebCrypto API</a>.
+If that is not supported, we fall back to using <code>Math.random()</code>.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>Sample Bootstrap Page</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="nx">div</span> <span class="nx">id</span><span class="o">=</span><span class="s2">&quot;cordova-js-token&quot;</span> <span class="nx">data</span><span class="o">-</span><span class="nx">token</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="o">&gt;&lt;</span><span class="err">/div&gt;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="nx">script</span><span class="o">&gt;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">generateToken</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">numbers</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="c1">// If possible, get cryptographically secure random values.</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">try</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">if</span> <span class="p">(</span><span class="nb">window</span><span class="p">.</span><span class="nx">crypto</span> <span class="o">&amp;&amp;</span> <span class="nx">crypto</span><span class="p">.</span><span class="nx">getRandomValues</span> <span class="o">&amp;&amp;</span> <span class="nb">window</span><span class="p">.</span><span class="nx">Uint32Array</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">numbers</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Uint32Array</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">crypto</span><span class="p">.</span><span class="nx">getRandomValues</span><span class="p">(</span><span class="nx">numbers</span><span class="p">);</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="p">&#x7d;</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span> <span class="k">catch</span><span class="p">(</span><span class="nx">cryptoError</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">numbers</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="c1">// Fallback to weak random values.</span>
+</div></div><div data-line='18' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">numbers</span> <span class="o">===</span> <span class="kc">null</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='19' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">numbers</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Array</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+</div></div><div data-line='20' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span>
+</div></div><div data-line='21' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">numbers</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">random</span><span class="p">();</span>
+</div></div><div data-line='22' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='23' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='24' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">strings</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Array</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+</div></div><div data-line='25' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span>
+</div></div><div data-line='26' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">strings</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">=</span> <span class="nx">numbers</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">toString</span><span class="p">(</span><span class="mi">36</span><span class="p">);</span>
+</div></div><div data-line='27' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="nx">strings</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">);</span>
+</div></div><div data-line='28' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='29' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">jsToken</span> <span class="o">=</span> <span class="nx">generateToken</span><span class="p">();</span>
+</div></div><div data-line='30' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='31' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">checkToken</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">submitted</span><span class="p">,</span> <span class="nx">baseline</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='32' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="nx">submitted</span> <span class="o">===</span> <span class="nx">baseline</span><span class="p">;</span>
+</div></div><div data-line='33' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='34' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='35' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">onMessage</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='36' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">origin</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span> <span class="o">!==</span> <span class="s1">&#39;file://&#39;</span><span class="p">)</span>
+</div></div><div data-line='37' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='38' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</div></div><div data-line='39' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="o">!==</span> <span class="s1">&#39;cordovaJs|&#39;</span><span class="p">)</span>
+</div></div><div data-line='40' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='41' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">tokenEnd</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">(</span><span class="s1">&#39;|&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
+</div></div><div data-line='42' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">tokenEnd</span> <span class="o">===</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</div></div><div data-line='43' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='44' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">checkToken</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="nx">tokenEnd</span><span class="p">),</span> <span class="nx">jsToken</span><span class="p">))</span>
+</div></div><div data-line='45' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">sessionStorage</span><span class="p">.</span><span class="nx">setItem</span><span class="p">(</span><span class="s1">&#39;cordova-js&#39;</span><span class="p">,</span> <span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="nx">tokenEnd</span> <span class="o">+</span> <span class="mi">1</span><span class="p">));</span>
+</div></div><div data-line='46' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='47' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nb">window</span><span class="p">.</span><span class="nx">parent</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span><span class="s1">&#39;jump|http://webapp.com:3000/&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</div></div><div data-line='48' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='49' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='50' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="nx">onMessage</span><span class="p">);</span>
+</div></div><div data-line='51' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">tokenDiv</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;cordova-js-token&#39;</span><span class="p">);</span>
+</div></div><div data-line='52' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">tokenDiv</span><span class="p">.</span><span class="nx">setAttribute</span><span class="p">(</span><span class="s1">&#39;data-token&#39;</span><span class="p">,</span> <span class="nx">jsToken</span><span class="p">);</span>
+</div></div><div data-line='53' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">parent</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span><span class="s1">&#39;getjs&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</div></div><div data-line='54' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;)();</span>
+</div></div><div data-line='55' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="o">&lt;</span><span class="err">/script&gt;</span></div></div></pre></div></figure>
+
+<p>Note that when the code above receives an incorrect token, it follows through
+the <code>postMessage</code> protocol, but doesn&#39;t update <code>sessionStorage</code>. This reduces
+the amount of information that a potential attacker might obtain, at the cost
+of making it harder to debug the JavaScript bundle transmission process.</p>
+
+<p>The host page&#39;s code, embedded in the application wrapper, is identical to the
+previous version, up to the <code>getIframeToken</code> function. The main source of
+complexity here is working around browser support for the <code>contentDocument</code>
+property. The <code>onMessage</code> function was modified to call out to
+<code>getIframeToken</code> and embed the return value in the message that it posts to
+the bootstrap page.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>www/js/index.js</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">bootstrapUrl</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000/cordova&#39;</span><span class="p">;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">bootstrapOrigin</span> <span class="o">=</span> <span class="s1">&#39;http://webapp.com:3000&#39;</span><span class="p">;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Issues an XHR get and passes the response String to the callback function.</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getUrl</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="nx">absoluteUrl</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">onreadystatechange</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">xhr</span><span class="p">.</span><span class="nx">readyState</span> <span class="o">!==</span> <span class="mi">4</span><span class="p">)</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">xhr</span><span class="p">.</span><span class="nx">responseText</span> <span class="o">||</span> <span class="nx">xhr</span><span class="p">.</span><span class="nx">response</span><span class="p">;</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">callback</span><span class="p">(</span><span class="nx">data</span><span class="p">);</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">send</span><span class="p">();</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='18' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Loads the JS bundle via XHR and passes it to the callback function.</span>
+</div></div><div data-line='19' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getBundle</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='20' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">pageUrl</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span><span class="p">;</span>
+</div></div><div data-line='21' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">slash</span> <span class="o">=</span> <span class="nx">pageUrl</span><span class="p">.</span><span class="nx">lastIndexOf</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">);</span>
+</div></div><div data-line='22' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">absoluteUrl</span> <span class="o">=</span> <span class="nx">pageUrl</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nx">slash</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;cordova_all.min.js&#39;</span><span class="p">;</span>
+</div></div><div data-line='23' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">getUrl</span><span class="p">(</span><span class="nx">absoluteUrl</span><span class="p">,</span> <span class="nx">callback</span><span class="p">);</span>
+</div></div><div data-line='24' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='25' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='26' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Load the bootstrap URL in the iframe.</span>
+</div></div><div data-line='27' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">iframe</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;iframe&#39;</span><span class="p">);</span>
+</div></div><div data-line='28' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nx">iframe</span><span class="p">.</span><span class="nx">src</span> <span class="o">=</span> <span class="nx">bootstrapUrl</span><span class="p">;</span>
+</div></div><div data-line='29' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='30' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Returns the HTMLDocument inside an &lt;iframe&gt;, or null.</span>
+</div></div><div data-line='31' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getIframeDocument</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">iframe</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='32' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentDocument</span> <span class="o">||</span> <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nb">document</span><span class="p">;</span>
+</div></div><div data-line='33' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='34' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='35' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Gets the XSS protection token in the &lt;iframe&gt;.</span>
+</div></div><div data-line='36' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getIframeToken</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">iframe</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='37' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">iframeDoc</span> <span class="o">=</span> <span class="nx">getIframeDocument</span><span class="p">(</span><span class="nx">iframe</span><span class="p">);</span>
+</div></div><div data-line='38' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">tokenDiv</span> <span class="o">=</span> <span class="nx">iframeDoc</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;cordova-js-token&#39;</span><span class="p">);</span>
+</div></div><div data-line='39' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="nx">tokenDiv</span><span class="p">.</span><span class="nx">getAttribute</span><span class="p">(</span><span class="s1">&#39;data-token&#39;</span><span class="p">);</span>
+</div></div><div data-line='40' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='41' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='42' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// The postMessage protocol used to talk to the bootstrap page.</span>
+</div></div><div data-line='43' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">onMessage</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='44' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">origin</span> <span class="o">!==</span> <span class="nx">bootstrapOrigin</span><span class="p">)</span>
+</div></div><div data-line='45' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span><span class="p">;</span>
+</div></div><div data-line='46' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</div></div><div data-line='47' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">data</span> <span class="o">===</span> <span class="s1">&#39;getjs&#39;</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='48' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nx">getBundle</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">cordovaJs</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='49' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">(</span>
+</div></div><div data-line='50' class='code-highlight-row numbered'><div class='code-highlight-line'>            <span class="s1">&#39;cordovaJs|&#39;</span> <span class="o">+</span> <span class="nx">cordovaJs</span><span class="p">,</span> <span class="nx">bootstrapOrigin</span><span class="p">);</span>
+</div></div><div data-line='51' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="p">&#x7d;);</span>
+</div></div><div data-line='52' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='53' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span> <span class="o">===</span> <span class="s1">&#39;jump|&#39;</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='54' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nb">window</span><span class="p">.</span><span class="nx">removeEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="nx">onMessage</span><span class="p">);</span>
+</div></div><div data-line='55' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="nb">window</span><span class="p">.</span><span class="nx">location</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span>
+</div></div><div data-line='56' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="p">&#x7d;</span>
+</div></div><div data-line='57' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;;</span>
+</div></div><div data-line='58' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="nx">onMessage</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='59' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;)();</span></div></div></pre></div></figure>
+
+<p>The security in this method can be proven by reasoning that an attacker who can
+extract the token from the bootstrap page can also extract a CSRF token
+embedded in a <code>&lt;form&gt;</code>, <code>&lt;input&gt;</code> or <code>&lt;meta&gt;</code> tag. Such an attacker can already
+execute requests on behalf of its victim.</p>
+
+<p>Unfortunately, just like the <code>contentWindow</code> trick described in a previous
+section, the code above does not work in Crosswalk 10, because of
+<a href="https://crosswalk-project.org/jira/browse/XWALK-2905">this bug</a>.</p>
+
+<p>If you want to use Crosswalk versions impacted by the bug, the host page
+JavaScript must be modified to catch security exceptions and return a special
+CSRF token, such as <code>0000</code>. The bootstrap page can accept the special token if
+it can verify that the JavaScript execution environment belongs to an
+impacted Crosswalk version.</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>Host Page Changes</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="kd">var</span> <span class="nx">getIframeDocument</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">iframe</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">try</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">iframe</span><span class="p">.</span><span class="nx">contentDocument</span><span class="p">)</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span> <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentDocument</span><span class="p">;</span>
+</div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span> <span class="k">catch</span><span class="p">(</span><span class="nx">securityError</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">try</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span> <span class="o">&amp;&amp;</span> <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nb">document</span><span class="p">)</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">return</span> <span class="nx">iframe</span><span class="p">.</span><span class="nx">contentWindow</span><span class="p">.</span><span class="nb">document</span><span class="p">;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span> <span class="k">catch</span><span class="p">(</span><span class="nx">securityError</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="p">&#x7d;</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">return</span> <span class="kc">null</span><span class="p">;</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="kd">var</span> <span class="nx">getIframeToken</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">iframe</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='16' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">iframeDoc</span> <span class="o">=</span> <span class="nx">getIframeDocument</span><span class="p">(</span><span class="nx">iframe</span><span class="p">);</span>
+</div></div><div data-line='17' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">iframeDoc</span> <span class="o">===</span> <span class="kc">null</span><span class="p">)</span>
+</div></div><div data-line='18' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="s1">&#39;0000&#39;</span><span class="p">;</span>
+</div></div><div data-line='19' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='20' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">tokenDiv</span> <span class="o">=</span> <span class="nx">iframeDoc</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;cordova-js-token&#39;</span><span class="p">);</span>
+</div></div><div data-line='21' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">return</span> <span class="nx">tokenDiv</span><span class="p">.</span><span class="nx">getAttribute</span><span class="p">(</span><span class="s1">&#39;data-token&#39;</span><span class="p">);</span>
+</div></div><div data-line='22' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span></div></div></pre></div></figure>
+
+<p>The host page changes above make the token extraction code more robust, and
+have no negative impact, from a security perspective. Therefore, they are
+included in the <code>html5-app-container</code> code.</p>
+
+<p>The Web application page gets to decide whether it accepts the special CSRF
+token. Therefore the modification below can simply be skipped by an application
+that never releases a wrapper based on a Crossswalk version impacted by the bug
+above. Although the changes</p>
+
+<figure class='code-highlight-figure'><figcaption class='code-highlight-caption'><span class='code-highlight-caption-title'>Crosswalk Bootstrap Page Changes</span></figcaption><div class='code-highlight'><pre class='code-highlight-pre'><div data-line='1' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="kd">var</span> <span class="nx">checkToken</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">baseline</span><span class="p">,</span> <span class="nx">submitted</span><span class="p">)</span> <span class="p">&#x7b;</span>
+</div></div><div data-line='2' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">submitted</span> <span class="o">===</span> <span class="nx">baseline</span><span class="p">)</span>
+</div></div><div data-line='3' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Work around XWALK-2905.</span>
+</div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">submitted</span> <span class="o">!==</span> <span class="s1">&#39;0000&#39;</span><span class="p">)</span>
+</div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nb">window</span><span class="p">.</span><span class="nx">_cordovaNative</span><span class="p">)</span>
+</div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">_cordovaNative</span><span class="p">.</span><span class="nx">exec</span><span class="p">.</span><span class="nx">toString</span><span class="p">()</span> <span class="o">!==</span> <span class="s1">&#39;function () &#x7b; [native code] &#x7d;&#39;</span><span class="p">)</span>
+</div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">false</span>
+</div></div><div data-line='12' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">navigator</span><span class="p">.</span><span class="nx">userAgent</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">(</span><span class="s1">&#39;Crosswalk/10.&#39;</span><span class="p">)</span> <span class="o">===</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</div></div><div data-line='13' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</div></div><div data-line='14' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</div></div><div data-line='15' class='code-highlight-row numbered'><div class='code-highlight-line'><span class="p">&#x7d;;</span></div></div></pre></div></figure>
+
+<p>This was implemented in
+<a href="https://github.com/pwnall/html5-app-container/tree/35509c975b963e23783ea20f197782ba97dcf767">the 5th major html5-app-container version</a>
+uses the approach outlined in this section. The new loader code is in
+<a href="https://github.com/pwnall/html5-app-container/blob/35509c975b963e23783ea20f197782ba97dcf767/app/js/loader.js">app/js/loader.js</a>.</p>
+
+<p>The code presented above has a couple of performance issues, compared to a
+wrapper that loads the Web application directly into a WebView.
+Time-permitting, they may be the subject of future work.</p>
+
+<p>First, loading the bootstrap page adds an HTTP round-trip to the application&#39;s
+startup time. This can be significant for applications that are meant to be
+used on the go. The round-trip can be eliminated from most starts by serving
+the bootstrap page with a far-in-the-future cache expiration time.</p>
+
+<p>A high-performance solution would remove the bootstrap page completely.
+Instead, a
+<a href="http://cordova.apache.org/docs/en/4.0.0/guide_hybrid_plugins_index.md.html">Cordova plugin</a>
+would serve the JavaScript bundle from a custom URL scheme. The Web application
+could attempt to load the bundle via an XMLHttpRequest, and would report a
+Cordova boot failure if the request fails. This approach would be expensive
+in terms of engineering time, as a Cordova plugin requires different native
+code for each supported platform, and must be maintained to track updates to
+the Cordova API.</p>
+
+<p>Second, storing the (rather large) JavaScript bundle in <code>sessionStorage</code> is a
+source of performance issues. The <code>sessionStorage</code> API consists of blocking
+calls, so the WebView&#39;s JS thread is unresponsive while the mobile device reads
+or writes the JavaScript bundle into the <code>sessionStorage</code> backing store. Also,
+some WebView implementations store the <code>sessionStorage</code> contents in RAM, so the
+JavaScript bundle might use 200kb of RAM (the bundle is 100kb after
+minification, but is likely stored as a
+<a href="http://stackoverflow.com/questions/8715980/javascript-strings-utf-16-vs-ucs-2">UTF-16 or UCS-2 string</a>.
+So, we&#39;re possibly taking up 200kb of RAM with a string that&#39;s only used once
+during page load.</p>
+
+<p>The <code>storageSession</code> is used in these samples because of its simplicity and
+wide support. A performance-conscious Web application could use
+<a href="https://dvcs.w3.org/hg/IndexedDB/raw-file/tip/Overview.html">IndexedDB</a> and
+fall back to the deprecated
+<a href="http://www.w3.org/TR/file-system-api/">Filesystem API</a> and
+<a href="http://www.w3.org/TR/webdatabase/">WebSQL database API</a>.
+Unfortunately, all fallbacks are necessary to achieve reasonable platform
+coverage. On a brighter note, the choice of bundle backing store is completely
+decoupled from the code inside the Cordova wrapper, so a Web application can
+deploy this performance improvement without having to change the code in
+<code>html5-app-container</code>.</p>
+
+<p>Of course, the problem of storing the JavaScript bundle goes away if the
+bootstrap page is eliminated by implementing a Cordova plugin.</p>
+
+<h2>JavaScript Bundle Signatures?</h2>
+
+<p>A noteworthy alternative to the CSRF token extraction method described here is
+signing the JavaScript bundles. The signatures would be produced during the
+application wrapper build process, and verified by the code in the bootstrap
+page.</p>
+
+<p>Unfortunately, this leaves secret key signing methods, like HMAC, out of
+the question, because the signature would be embedded on the bootstrap page.
+Verifying asymmetric (e.g., RSA) signatures is slow when done in JavaScript.
+Furthermore, signing would burden the build process with the extra complexity
+of handling a secret key.</p>
+
+<p>Last but not least, relying on signatures would mean that the bootstrap page
+would accept any previously signed JavaScript bundle. A troll could use this to
+load a Cordova bundle into the site when used from a normal browser, which
+would cause JavaScript prompts to pop up when the user browses to our Web
+application.</p>
+
+<p>A more serious attacker could load an old (but still signed) version of a
+bundle with known security vulnerabilities, and exploit the vulnerabilities
+against the site.</p>
+
+<h2>General Security Considerations</h2>
+
+<p>Unfortunately, all the designs above have the drawback that any XSS (cross-site
+scripting) vulnerability can be used to obtain access to native features.</p>
+
+<p>At the same time, it is worth mentioning that native applications also suffer
+from security vulnerabilities, such as
+<a href="https://www.usenix.org/system/files/conference/woot12/woot12-final7.pdf">push notifications spam and hijacking</a>
+and
+<a href="http://css.csail.mit.edu/6.858/2012/projects/ocderby-dennisw-kcasteel.pdf">Android intent hijacking</a>.
+Furthermore, a security patch in a Web application requires a server push to
+be deployed, which can be done in minutes or at most hours. A mobile
+application patch requires an app store / market submission, which often
+includes a human review, and can take between hours and days.</p>
+
+<h2>Conclusion</h2>
+
+<p>This article described the tricks I used in the
+<a href="https://github.com/pwnall/html5-app-container">html5-app-container</a> project,
+which allows me to build Web applications with the native capabilities afforded
+by <a href="http://cordova.apache.org/">Cordova</a>, and iterate on my code using the
+edit-save-reload cycle that is typical of Web applications.</p>
+
+  </article>
+
+</div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrap">
+
+    <h2 class="footer-heading">pwnall Hacking on Blink and Chromium</h2>
+
+    <div class="footer-col-1 column">
+      <ul>
+        <li>pwnall Hacking on Blink and Chromium</li>
+        <li><a href="mailto:victor@costan.us">victor@costan.us</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col-2 column">
+      <ul>
+        <li>
+          <a href="https://github.com/">
+            <span class="icon github">
+              <svg version="1.1" class="github-icon-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+                 viewBox="0 0 16 16" enable-background="new 0 0 16 16" xml:space="preserve">
+                <path fill-rule="evenodd" clip-rule="evenodd" fill="#C2C2C2" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761
+                c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32
+                c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472
+                c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037
+                C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65
+                c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261
+                c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082
+                c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129
+                c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/>
+              </svg>
+            </span>
+            <span class="username"></span>
+          </a>
+        </li>
+        <li>
+          <a href="https://twitter.com/">
+            <span class="icon twitter">
+              <svg version="1.1" class="twitter-icon-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+                 viewBox="0 0 16 16" enable-background="new 0 0 16 16" xml:space="preserve">
+                <path fill="#C2C2C2" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809
+                c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27
+                c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767
+                c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206
+                C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271
+                c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469
+                c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"/>
+              </svg>
+            </span>
+            <span class="username"></span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="footer-col-3 column">
+      <p class="text">Victor Costan is a Blink / Chromium committer and a WebKit contributor. This blog documents his attempts to understand the codebases and improve the Web platform.</p>
+    </div>
+
+  </div>
+
+</footer>
+
+
+    </body>
+</html>
