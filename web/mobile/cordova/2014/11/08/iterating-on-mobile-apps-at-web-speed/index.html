@@ -10,10 +10,9 @@
     <link rel="canonical" href="http://pwnall.herokuapp.com/web/mobile/cordova/2014/11/08/iterating-on-mobile-apps-at-web-speed/">
 
     <link rel="stylesheet" href="/css/main.css">
-<link href='/stylesheets/all-d79546f2ecf0a39c8dea4f33820c97fa.css' media='all' rel='stylesheet' type='text/css'>
-
+<link href='/stylesheets/all-80e44acd0b53c3268b4b038ae4dcb9c1.css' media='all' rel='stylesheet' type='text/css'>
+<script src='/javascripts/all-d41d8cd98f00b204e9800998ecf8427e.js'></script>
 </head>
-
 
     <body>
 
@@ -47,7 +46,6 @@
   </div>
 
 </header>
-
 
     <div class="page-content">
       <div class="wrap">
@@ -540,7 +538,7 @@ to the code for the <code>&lt;iframe&gt;</code>-based approach presented above.<
 </div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Issues an XHR get and passes the response String to the callback function.</span>
 </div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getUrl</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
 </div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
-</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="nx">absoluteUrl</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="nx">absoluteUrl</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
 </div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">onreadystatechange</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
 </div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">xhr</span><span class="p">.</span><span class="nx">readyState</span> <span class="o">!==</span> <span class="mi">4</span><span class="p">)</span>
 </div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="k">return</span><span class="p">;</span>
@@ -707,7 +705,7 @@ the bootstrap page.</p>
 </div></div><div data-line='4' class='code-highlight-row numbered'><div class='code-highlight-line'> </div></div><div data-line='5' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="c1">// Issues an XHR get and passes the response String to the callback function.</span>
 </div></div><div data-line='6' class='code-highlight-row numbered'><div class='code-highlight-line'>  <span class="kd">var</span> <span class="nx">getUrl</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">&#x7b;</span>
 </div></div><div data-line='7' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
-</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="nx">absoluteUrl</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</div></div><div data-line='8' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="nx">absoluteUrl</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
 </div></div><div data-line='9' class='code-highlight-row numbered'><div class='code-highlight-line'>    <span class="nx">xhr</span><span class="p">.</span><span class="nx">onreadystatechange</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">&#x7b;</span>
 </div></div><div data-line='10' class='code-highlight-row numbered'><div class='code-highlight-line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">xhr</span><span class="p">.</span><span class="nx">readyState</span> <span class="o">!==</span> <span class="mi">4</span><span class="p">)</span>
 </div></div><div data-line='11' class='code-highlight-row numbered'><div class='code-highlight-line'>        <span class="k">return</span><span class="p">;</span>
@@ -978,7 +976,6 @@ edit-save-reload cycle that is typical of Web applications.</p>
   </div>
 
 </footer>
-
 
     </body>
 </html>
